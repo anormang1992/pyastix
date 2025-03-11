@@ -1,8 +1,7 @@
 # Pyastix: Python Codebase Visualization
 
-Pyastix is a revolutionary Python CLI tool that renders Python codebases as stunning, interactive dependency graphs. Visualize the structure of your modules, classes, methods, and their relationships with ease.
+Pyastix is a Python CLI tool that renders Python codebases as stunning, interactive dependency graphs. Visualize the structure of your modules, classes, methods, and their relationships with ease.
 
-![Pyastix Demo](https://via.placeholder.com/800x450?text=Pyastix+Demo)
 
 ## Features
 
