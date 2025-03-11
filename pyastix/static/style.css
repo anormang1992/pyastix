@@ -113,6 +113,28 @@ main {
     flex-grow: 1;
 }
 
+.control-button {
+    margin-top: 8px;
+    width: 100%;
+    padding: 6px;
+    background-color: #f0f0f0;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.control-button:hover {
+    background-color: #e6e6e6;
+}
+
+.tip {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #666;
+    font-style: italic;
+}
+
 .color-indicator {
     width: 15px;
     height: 15px;
@@ -332,6 +354,13 @@ svg {
 .node circle {
     stroke: #fff;
     stroke-width: 2px;
+}
+
+/* Style for fixed nodes */
+.fixed-node circle {
+    stroke: #aaa;
+    stroke-width: 3px;
+    stroke-dasharray: 3, 3;  /* Dashed stroke pattern */
 }
 
 .node.module circle {

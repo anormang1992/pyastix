@@ -502,3 +502,4 @@ class DependencyGraphGenerator:
         
         self.edge_ids.add(id)
         self.edges.append(GraphEdge(id, source, target, type, data)) 
+        

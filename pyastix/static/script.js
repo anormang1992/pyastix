@@ -7,6 +7,9 @@ let linkElements;
 let zoom;
 let currentZoomTransform = null;
 let selectedNode = null;
+let layoutFixed = false; // Track whether layout is fixed or dynamic
+let clickTimer = null; // For handling click vs double-click
+let clickDelay = 300; // Milliseconds to wait before handling a click
 let visibleTypes = {
     module: true,
     class: true,
@@ -197,6 +200,45 @@ function setupEventListeners() {
             .classed('animated', toggleInheritAnimations.checked);
     });
 
+    // Layout controls
+    document.getElementById('toggle-fixed-layout').addEventListener('change', function() {
+        layoutFixed = this.checked;
+        
+        if (layoutFixed) {
+            // Fix all nodes in their current positions
+            graph.nodes.forEach(node => {
+                node.fx = node.x;
+                node.fy = node.y;
+            });
+        } else {
+            // Only release nodes if the release button wasn't pressed
+            // This allows the toggle to act as a way to "lock" current positions
+        }
+        
+        // Update node styling
+        updateFixedNodeStyling();
+        
+        simulation.alpha(0.3).restart();
+    });
+    
+    document.getElementById('release-all-nodes').addEventListener('click', function() {
+        // Release all nodes
+        graph.nodes.forEach(node => {
+            node.fx = null;
+            node.fy = null;
+        });
+        
+        // Update node styling
+        updateFixedNodeStyling();
+        
+        // Uncheck the fixed layout toggle
+        document.getElementById('toggle-fixed-layout').checked = false;
+        layoutFixed = false;
+        
+        // Restart the simulation
+        simulation.alpha(0.5).restart();
+    });
+
     // Close dropdown when clicking outside
     document.addEventListener('click', function(event) {
         if (!searchInput.contains(event.target) && 
@@ -243,12 +285,12 @@ function initializeGraph() {
     
     // Create the force simulation
     simulation = d3.forceSimulation()
-        .force('link', d3.forceLink().id(d => d.id).distance(100))
-        .force('charge', d3.forceManyBody().strength(-200))
+        .force('link', d3.forceLink().id(d => d.id).distance(100).strength(0.5))
+        .force('charge', d3.forceManyBody().strength(-100))
         .force('center', d3.forceCenter(
             graphContainer.clientWidth / 2,
             graphContainer.clientHeight / 2
-        ))
+        ).strength(0.05))
         .force('collide', d3.forceCollide(30));
     
     // Create links
@@ -302,8 +344,34 @@ function initializeGraph() {
         .attr('dy', '.35em')
         .text(d => d.label);
     
-    // Add click event to nodes
-    nodeGroups.on('click', nodeClicked);
+    // Handle both click and double-click events
+    nodeGroups.on('click', function(event, d) {
+        // Detect if it's a double-click
+        if (event.detail === 2) {
+            // This is a double-click - release the node
+            d.fx = null;
+            d.fy = null;
+            // Update styling
+            d3.select(this).classed('fixed-node', false);
+            // Restart the simulation with some activity
+            simulation.alpha(0.3).restart();
+            // Clear any existing click timer
+            if (clickTimer) {
+                clearTimeout(clickTimer);
+                clickTimer = null;
+            }
+        } else {
+            // This is a single click - handle with delay to allow for double-click
+            if (clickTimer) {
+                clearTimeout(clickTimer);
+            }
+            clickTimer = setTimeout(() => {
+                // This executes if there wasn't a double-click within the delay period
+                nodeClicked(event, d);
+                clickTimer = null;
+            }, clickDelay);
+        }
+    });
     
     // Save node elements for updates
     nodeElements = nodeGroups;
@@ -311,6 +379,9 @@ function initializeGraph() {
     // Start the simulation
     simulation.nodes(graph.nodes).on('tick', ticked);
     simulation.force('link').links(graph.edges);
+    
+    // Initialize fixed node styling
+    updateFixedNodeStyling();
     
     // Tick function to update positions
     function ticked() {
@@ -473,6 +544,9 @@ function dragStarted(event, d) {
     if (!event.active) simulation.alphaTarget(0.3).restart();
     d.fx = d.x;
     d.fy = d.y;
+    
+    // Mark the node as fixed immediately
+    d3.select(event.sourceEvent.target.parentNode).classed('fixed-node', true);
 }
 
 function dragging(event, d) {
@@ -482,8 +556,27 @@ function dragging(event, d) {
 
 function dragEnded(event, d) {
     if (!event.active) simulation.alphaTarget(0);
-    d.fx = null;
-    d.fy = null;
+    // Keep node fixed at final drag position if layoutFixed is true,
+    // otherwise always keep node positions fixed after individual dragging
+    if (!layoutFixed) {
+        // User has manually dragged this node, so keep it fixed
+        // (User can double-click to release it if needed)
+    } else {
+        // In fixed layout mode, nodes are already fixed
+    }
+    
+    // Update fixed node styling
+    updateFixedNodeStyling();
+}
+
+// Helper function to update the appearance of fixed vs non-fixed nodes
+function updateFixedNodeStyling() {
+    if (!nodeElements) return;
+    
+    nodeElements.classed('fixed-node', function(d) {
+        // A node is considered fixed if it has fx and fy coordinates set
+        return d.fx !== null && d.fy !== null;
+    });
 }
 
 // Handle node click event
@@ -701,54 +794,15 @@ function simulateNodeClick(node) {
     const nodeElement = nodeElements.filter(d => d.id === node.id).node();
     
     if (nodeElement) {
-        // Check if this is the same node that was already selected
-        const isSameNode = selectedNode && selectedNode.id === node.id;
-        const panelWasCollapsed = sidePanel.classList.contains('collapsed');
+        // For programmatic clicks, bypass the click timer and directly call nodeClicked
+        // Create a mock event object with the minimal properties needed
+        const mockEvent = { 
+            target: nodeElement,
+            stopPropagation: () => {}
+        };
         
-        // For search results or programmatic focusing, always open the panel
-        // Don't toggle closed even if it's the same node
-        
-        // Save reference to selected node
-        selectedNode = node;
-        
-        // Highlight the node
-        nodeElements.selectAll('circle')
-            .style('stroke', d => d.id === node.id ? '#ff5722' : '#fff')
-            .style('stroke-width', d => d.id === node.id ? 3 : 2);
-            
-        // Force the panel to open
-        sidePanel.classList.remove('collapsed');
-        
-        // Adjust view if needed
-        if (panelWasCollapsed) {
-            const transform = currentZoomTransform || d3.zoomIdentity;
-            setTimeout(() => {
-                adjustGraphForPanelChange(transform, true);
-            }, 50);
-        }
-        
-        // Update side panel content
-        elementName.textContent = node.label;
-        elementType.textContent = capitalizeFirstLetter(node.type);
-        elementPath.textContent = node.data.path;
-        
-        // Update stats display
-        updateNodeStats(node);
-        
-        // Fetch source code
-        fetch(`/api/source?id=${encodeURIComponent(node.id)}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    elementCode.textContent = `// Error loading source code: ${data.error}`;
-                } else {
-                    elementCode.textContent = data.source;
-                    hljs.highlightElement(elementCode);
-                }
-            })
-            .catch(error => {
-                elementCode.textContent = `// Error loading source code: ${error}`;
-            });
+        // Directly call nodeClicked with our node
+        nodeClicked(mockEvent, node);
     }
 }
 

@@ -225,6 +225,8 @@ class Method(Function):
     def __init__(self, name: str, path: str, lineno: int, end_lineno: int, class_name: str):
         super().__init__(name, path, lineno, end_lineno)
         self.class_name = class_name
+        # Override the inherited ID to include the class name for uniqueness
+        self.id = f"{path}:{class_name}.{name}"
 
 
 class Import(CodeElement):
