@@ -2,8 +2,7 @@
 
 Pyastix is a Python CLI tool that renders Python codebases as stunning, interactive dependency graphs. Visualize the structure of your modules, classes, methods, and their relationships with ease.
 
-![alt text](image.png)
-
+![image](https://github.com/user-attachments/assets/a3dbdea1-e795-4ffc-99a3-cfcdbb06005c)
 
 ## Features
 
