@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pyastix - Code Dependency Visualization</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/github.min.css">
+</head>
+<body>
+    <header>
+        <div class="logo">Pyastix</div>
+        <div class="search-container">
+            <input type="text" id="search-input" placeholder="Search for modules, classes, methods...">
+            <button id="search-button">Search</button>
+            <div id="search-results-dropdown" class="dropdown-container"></div>
+        </div>
+    </header>
+
+    <main>
+        <div id="left-panel">
+            <div class="panel-section">
+                <h3>Filters</h3>
+                <div class="toggle-container">
+                    <label class="toggle-item">
+                        <input type="checkbox" id="toggle-modules" checked>
+                        <span class="toggle-label">Modules</span>
+                        <span class="color-indicator module"></span>
+                    </label>
+                    <label class="toggle-item">
+                        <input type="checkbox" id="toggle-classes" checked>
+                        <span class="toggle-label">Classes</span>
+                        <span class="color-indicator class"></span>
+                    </label>
+                    <label class="toggle-item">
+                        <input type="checkbox" id="toggle-methods" checked>
+                        <span class="toggle-label">Methods</span>
+                        <span class="color-indicator method"></span>
+                    </label>
+                    <label class="toggle-item">
+                        <input type="checkbox" id="toggle-functions" checked>
+                        <span class="toggle-label">Functions</span>
+                        <span class="color-indicator function"></span>
+                    </label>
+                </div>
+            </div>
+            
+            <div class="panel-section">
+                <h3>Edge Types</h3>
+                <div class="toggle-container">
+                    <label class="toggle-item">
+                        <input type="checkbox" id="toggle-contains" checked>
+                        <span class="toggle-label">Contains</span>
+                        <span class="edge-indicator contains"></span>
+                    </label>
+                    <label class="toggle-item">
+                        <input type="checkbox" id="toggle-calls" checked>
+                        <span class="toggle-label">Calls</span>
+                        <span class="edge-indicator calls"></span>
+                    </label>
+                    <label class="toggle-item">
+                        <input type="checkbox" id="toggle-imports" checked>
+                        <span class="toggle-label">Imports</span>
+                        <span class="edge-indicator imports"></span>
+                    </label>
+                    <label class="toggle-item">
+                        <input type="checkbox" id="toggle-inherits" checked>
+                        <span class="toggle-label">Inherits</span>
+                        <span class="edge-indicator inherits"></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+        
+        <div class="content-area">
+            <div id="graph-container"></div>
+            
+            <div id="side-panel" class="collapsed">
+                <div class="side-panel-header">
+                    <h2 id="element-name">Element Name</h2>
+                    <button id="close-panel">×</button>
+                </div>
+                <div class="element-info">
+                    <p id="element-type">Type: <span></span></p>
+                    <p id="element-path">Path: <span></span></p>
+                </div>
+                <div class="element-stats">
+                    <div class="stats-row">
+                        <div class="stat-item">
+                            <span class="stat-label">Line Range:</span>
+                            <span id="line-range" class="stat-value">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Lines of Code:</span>
+                            <span id="line-count" class="stat-value">-</span>
+                        </div>
+                    </div>
+                    <div class="stats-row">
+                        <div class="stat-item">
+                            <span class="stat-label">Incoming Calls:</span>
+                            <span id="incoming-calls" class="stat-value">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Outgoing Calls:</span>
+                            <span id="outgoing-calls" class="stat-value">-</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="code-container">
+                    <pre><code id="element-code" class="python"></code></pre>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>

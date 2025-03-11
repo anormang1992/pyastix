@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyastix"
+version = "0.1.0"
+description = "Interactive Python codebase dependency graph visualization tool"
+readme = "README.md"
+authors = [
+    {name = "Pyastix Team"}
+]
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "click>=8.0.0",
+    "astroid>=2.15.0",
+    "networkx>=2.8.0",
+    "flask>=2.0.0",
+    "pyvis>=0.3.0",
+]
+
+[project.scripts]
+pyastix = "pyastix.cli:main"
+
+[project.urls]
+"Homepage" = "https://github.com/user/pyastix"
+"Bug Reports" = "https://github.com/user/pyastix/issues" 
