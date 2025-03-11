@@ -49,6 +49,11 @@ const toggleCalls = document.getElementById('toggle-calls');
 const toggleImports = document.getElementById('toggle-imports');
 const toggleInherits = document.getElementById('toggle-inherits');
 
+// Animation toggles
+const toggleCallAnimations = document.getElementById('toggle-call-animations');
+const toggleImportAnimations = document.getElementById('toggle-import-animations');
+const toggleInheritAnimations = document.getElementById('toggle-inherit-animations');
+
 // Global variables
 const searchDropdown = document.getElementById('search-results-dropdown');
 
@@ -117,6 +122,14 @@ function setupEventListeners() {
         // Close the panel
         sidePanel.classList.add('collapsed');
         
+        // Remove highlighting from all nodes
+        nodeElements.selectAll('circle')
+            .style('stroke', '#fff')
+            .style('stroke-width', 2);
+        
+        // Reset the selected node
+        selectedNode = null;
+        
         // Adjust the graph view with minimal disruption
         setTimeout(() => {
             adjustGraphForPanelChange(previousTransform, false);
@@ -163,6 +176,25 @@ function setupEventListeners() {
     toggleInherits.addEventListener('change', () => {
         visibleEdgeTypes.inherits = toggleInherits.checked;
         updateVisibility();
+    });
+
+    // Animation toggles
+    toggleCallAnimations.addEventListener('change', () => {
+        // Apply or remove the animated class to call edges
+        linkElements.filter(d => d.type === 'calls')
+            .classed('animated', toggleCallAnimations.checked);
+    });
+    
+    toggleImportAnimations.addEventListener('change', () => {
+        // Apply or remove the animated class to import edges
+        linkElements.filter(d => d.type === 'imports')
+            .classed('animated', toggleImportAnimations.checked);
+    });
+    
+    toggleInheritAnimations.addEventListener('change', () => {
+        // Apply or remove the animated class to inheritance edges
+        linkElements.filter(d => d.type === 'inherits')
+            .classed('animated', toggleInheritAnimations.checked);
     });
 
     // Close dropdown when clicking outside
@@ -225,7 +257,18 @@ function initializeGraph() {
         .data(graph.edges)
         .enter()
         .append('line')
-        .attr('class', d => `link ${d.type}`)
+        .attr('class', d => {
+            let classes = `link ${d.type}`;
+            // Add animated class to edges if their respective animation toggle is checked
+            if (d.type === 'calls' && toggleCallAnimations && toggleCallAnimations.checked) {
+                classes += ' animated';
+            } else if (d.type === 'imports' && toggleImportAnimations && toggleImportAnimations.checked) {
+                classes += ' animated';
+            } else if (d.type === 'inherits' && toggleInheritAnimations && toggleInheritAnimations.checked) {
+                classes += ' animated';
+            }
+            return classes;
+        })
         .style('display', d => visibleEdgeTypes[d.type] ? null : 'none');
     
     // Create nodes
@@ -274,7 +317,14 @@ function initializeGraph() {
         linkElements
             .attr('x1', d => d.source.x)
             .attr('y1', d => d.source.y)
-            .attr('x2', d => d.target.x)
+            .attr('x2', d => {
+                // For inheritance edges, make them more vertical
+                if (d.type === 'inherits' && toggleInheritAnimations && toggleInheritAnimations.checked) {
+                    // Move target position 80% toward the target's x
+                    return d.source.x + (d.target.x - d.source.x) * 0.99;
+                }
+                return d.target.x;
+            })
             .attr('y2', d => d.target.y);
         
         nodeGroups
@@ -716,6 +766,22 @@ function updateVisibility() {
                visibleTypes[sourceNode.type] && 
                visibleTypes[targetNode.type] ? null : 'none';
     });
+    
+    // Ensure edges have animation classes if respective toggles are on
+    if (toggleCallAnimations && toggleCallAnimations.checked) {
+        linkElements.filter(d => d.type === 'calls')
+            .classed('animated', true);
+    }
+    
+    if (toggleImportAnimations && toggleImportAnimations.checked) {
+        linkElements.filter(d => d.type === 'imports')
+            .classed('animated', true);
+    }
+    
+    if (toggleInheritAnimations && toggleInheritAnimations.checked) {
+        linkElements.filter(d => d.type === 'inherits')
+            .classed('animated', true);
+    }
     
     // Restart simulation with small alpha to avoid large movements
     simulation.alpha(0.1).restart();

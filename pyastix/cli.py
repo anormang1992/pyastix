@@ -16,7 +16,8 @@ from .web_interface import WebServer
 @click.argument('project_path', type=click.Path(exists=True, file_okay=False, readable=True))
 @click.option('--port', '-p', default=8000, help='Port to run the web server on.')
 @click.option('--browser/--no-browser', default=True, help='Open in browser automatically.')
-def main(project_path, port, browser):
+@click.option('--module', '-m', help='Target a specific module to visualize. Only this module and its direct dependencies will be shown.')
+def main(project_path, port, browser, module):
     """
     Generate and visualize a dependency graph for a Python project.
     
@@ -34,7 +35,12 @@ def main(project_path, port, browser):
     # Generate the graph
     click.echo("Generating dependency graph...")
     graph_generator = DependencyGraphGenerator(codebase_structure)
-    graph_data = graph_generator.generate()
+    
+    if module:
+        click.echo(f"Focusing on module: {module}")
+        graph_data = graph_generator.generate_for_module(module)
+    else:
+        graph_data = graph_generator.generate()
     
     # Start the web server
     click.echo(f"Starting web server on port {port}...")

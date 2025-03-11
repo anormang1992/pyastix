@@ -165,6 +165,89 @@ class DependencyGraphGenerator:
         
         return DependencyGraph(self.nodes, self.edges)
     
+    def generate_for_module(self, module_name: str) -> DependencyGraph:
+        """
+        Generate a dependency graph focused on a specific module and its dependencies.
+        
+        Args:
+            module_name (str): Name of the module to focus on
+            
+        Returns:
+            DependencyGraph: The generated dependency graph filtered for the module
+        """
+        # Create the full graph first
+        self.generate()
+        
+        # Find the target module node
+        target_module = None
+        for node in self.nodes:
+            if node.type == "module" and (node.label == module_name or node.label.endswith("." + module_name)):
+                target_module = node
+                break
+        
+        if not target_module:
+            print(f"Warning: Module '{module_name}' not found. Showing full graph.")
+            return DependencyGraph(self.nodes, self.edges)
+        
+        # Get the module and its direct contents first
+        included_nodes = {target_module.id}
+        module_contents = set()
+        
+        # Get direct children (contents of the module)
+        for edge in self.edges:
+            if edge.source == target_module.id and edge.type == "contains":
+                included_nodes.add(edge.target)
+                module_contents.add(edge.target)
+        
+        # Get direct external dependencies (imports, calls, inheritance) but don't recurse
+        for node_id in list(module_contents) + [target_module.id]:
+            # Direct imports
+            for edge in self.edges:
+                if edge.source == node_id and edge.type == "imports":
+                    included_nodes.add(edge.target)
+                    # Also include the parent module of the target
+                    self._add_module_container(edge.target, included_nodes)
+            
+            # Direct calls
+            for edge in self.edges:
+                if edge.source == node_id and edge.type == "calls":
+                    included_nodes.add(edge.target)
+                    # Also include the parent module/class of the target
+                    self._add_module_container(edge.target, included_nodes)
+            
+            # Direct inheritance
+            for edge in self.edges:
+                if edge.source == node_id and edge.type == "inherits":
+                    included_nodes.add(edge.target)
+                    # Also include the parent module of the target
+                    self._add_module_container(edge.target, included_nodes)
+        
+        # Filter nodes and edges
+        filtered_nodes = [node for node in self.nodes if node.id in included_nodes]
+        filtered_edges = [edge for edge in self.edges 
+                         if edge.source in included_nodes and edge.target in included_nodes]
+        
+        return DependencyGraph(filtered_nodes, filtered_edges)
+    
+    def _add_module_container(self, node_id: str, included_nodes: Set[str]) -> None:
+        """
+        Add the containing module of a node to the included nodes.
+        Unlike _add_parent_nodes, this will only go up to the module level, not recursively upward.
+        
+        Args:
+            node_id (str): ID of the node to find the containing module for
+            included_nodes (Set[str]): Set of node IDs to include in the filtered graph
+        """
+        for edge in self.edges:
+            if edge.target == node_id and edge.type == "contains":
+                container_node = next((n for n in self.nodes if n.id == edge.source), None)
+                if container_node and container_node.type == "module":
+                    included_nodes.add(edge.source)
+                    return
+                elif container_node:
+                    included_nodes.add(edge.source)
+                    self._add_module_container(edge.source, included_nodes)
+    
     def _create_nodes(self) -> None:
         """
         Create nodes for all code elements in the codebase structure.

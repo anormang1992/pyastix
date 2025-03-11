@@ -35,6 +35,16 @@ pyastix /path/to/your/project
 
 This will analyze your codebase, generate a visualization, and open it in your default web browser.
 
+### Focusing on Specific Modules
+
+To visualize only a specific module and its direct dependencies, use the `--module` flag:
+
+```bash
+pyastix /path/to/your/project --module mymodule
+```
+
+This is useful for exploring larger codebases where you want to focus on a particular component without seeing the entire dependency tree.
+
 ### Options
 
 ```
@@ -43,6 +53,8 @@ pyastix [OPTIONS] PROJECT_PATH
 Options:
   -p, --port INTEGER        Port to run the web server on.
   --browser / --no-browser  Open in browser automatically.
+  -m, --module TEXT         Target a specific module to visualize. Only this module 
+                            and its direct dependencies will be shown.
   --help                    Show this message and exit.
 ```
 
