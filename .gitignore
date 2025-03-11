@@ -6,3 +6,12 @@ __pycache__/
 
 # Ignore egg-info
 pyastix.egg-info/
+
+# Ignore build
+build/
+
+# Ignore dist
+dist/
+
+# Ignore pyastixignore
+.pyastixignore
