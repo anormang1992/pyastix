@@ -1,0 +1,8 @@
+# Ignore pycache
+__pycache__/
+
+# Ignore pytest cache
+.pytest_cache/
+
+# Ignore egg-info
+pyastix.egg-info/

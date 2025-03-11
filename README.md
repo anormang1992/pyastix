@@ -46,6 +46,35 @@ pyastix /path/to/your/project --module mymodule
 
 This is useful for exploring larger codebases where you want to focus on a particular component without seeing the entire dependency tree.
 
+### Ignoring Files and Directories
+
+You can exclude specific files or directories from analysis by creating a `.pyastixignore` file in your project root. This file uses gitignore-style syntax:
+
+```
+# Ignore virtual environments
+venv/
+.env/
+
+# Ignore test files
+*_test.py
+test_*.py
+
+# Ignore specific directories
+examples/
+build/
+
+# Ignore specific file
+config.py
+```
+
+Supported pattern features:
+- `*` matches any number of characters except `/`
+- `**` matches any number of characters including `/`
+- `?` matches a single character except `/`
+- `!` negates a pattern (include files that would otherwise be ignored)
+- `/` at the beginning of the pattern makes it match from the project root
+- `/` at the end of the pattern makes it match directories only
+
 ### Options
 
 ```

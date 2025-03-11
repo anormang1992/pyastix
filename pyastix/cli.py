@@ -21,6 +21,10 @@ def main(project_path, port, browser, module):
     """
     Generate and visualize a dependency graph for a Python project.
     
+    Pyastix will walk through your project directory and parse Python files
+    to build a dependency graph. You can customize which files to include or exclude
+    using a .pyastixignore file in your project root.
+    
     Args:
         project_path: Path to the Python project to analyze
     """

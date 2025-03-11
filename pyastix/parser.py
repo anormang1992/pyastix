@@ -6,7 +6,137 @@ import os
 import ast
 import astroid
 from pathlib import Path
+import re
+import fnmatch
 from typing import Dict, List, Set, Tuple, Any, Optional
+
+
+class IgnorePattern:
+    """
+    Handles gitignore-style pattern matching for .pyastixignore files.
+    
+    Args:
+        pattern (str): A gitignore-style pattern
+    """
+    def __init__(self, pattern: str):
+        self.pattern = pattern.strip()
+        # Skip comments and empty lines
+        self.is_valid = bool(self.pattern) and not self.pattern.startswith('#')
+        # Check if pattern should match directories only
+        self.dirs_only = self.pattern.endswith('/')
+        if self.dirs_only:
+            self.pattern = self.pattern[:-1]
+        # Handle negation (pattern starts with !)
+        self.is_negated = self.pattern.startswith('!')
+        if self.is_negated:
+            self.pattern = self.pattern[1:]
+        # Convert gitignore pattern to regex
+        self._prepare_regex()
+    
+    def _prepare_regex(self) -> None:
+        """Convert gitignore pattern to regex pattern."""
+        if not self.is_valid:
+            self.regex = None
+            return
+            
+        # Escape special regex chars except those used in gitignore
+        pattern = re.escape(self.pattern)
+        
+        # Convert gitignore globs to regex:
+        # * matches anything except /
+        pattern = pattern.replace('\\*', '[^/]*')
+        
+        # ** matches anything including /
+        pattern = pattern.replace('\\*\\*', '.*')
+        
+        # ? matches a single character except /
+        pattern = pattern.replace('\\?', '[^/]')
+        
+        # If pattern doesn't contain a slash, it matches any directory level
+        if '/' not in self.pattern:
+            pattern = f'(.*/)?{pattern}'
+        
+        # If pattern starts with /, anchor to project root
+        elif pattern.startswith('\\/'):
+            pattern = pattern[2:]  # Remove the escaped slash
+        
+        # Ensure matches are complete
+        pattern = f'^{pattern}(/.*)?$' if self.dirs_only else f'^{pattern}$'
+        
+        self.regex = re.compile(pattern)
+    
+    def matches(self, path: str) -> bool:
+        """
+        Check if the given path matches this pattern.
+        
+        Args:
+            path (str): Path to check against the pattern
+            
+        Returns:
+            bool: True if path matches the pattern, False otherwise
+        """
+        if not self.is_valid or not self.regex:
+            return False
+            
+        return bool(self.regex.match(path))
+
+
+class IgnorePatternList:
+    """
+    Manages a list of gitignore patterns to determine whether files should be ignored.
+    
+    Args:
+        project_path (Path): Path to the project root
+    """
+    def __init__(self, project_path: Path):
+        self.patterns: List[IgnorePattern] = []
+        self.project_path = project_path
+        self._load_patterns()
+    
+    def _load_patterns(self) -> None:
+        """Load patterns from .pyastixignore file if it exists."""
+        ignore_file = self.project_path / '.pyastixignore'
+        if ignore_file.exists():
+            try:
+                with open(ignore_file, 'r') as f:
+                    for line in f:
+                        pattern = IgnorePattern(line)
+                        if pattern.is_valid:
+                            self.patterns.append(pattern)
+            except Exception as e:
+                print(f"Warning: Error reading .pyastixignore file: {e}")
+    
+    def should_ignore(self, path: Path) -> bool:
+        """
+        Determine if a file or directory should be ignored.
+        
+        Args:
+            path (Path): Path to check
+            
+        Returns:
+            bool: True if the path should be ignored, False otherwise
+        """
+        if not self.patterns:
+            return False
+            
+        # Make path relative to project root
+        try:
+            rel_path = path.relative_to(self.project_path)
+            path_str = str(rel_path).replace('\\', '/')
+        except ValueError:
+            # If path is not relative to project, don't ignore
+            return False
+            
+        # Default to not ignored
+        ignored = False
+        
+        # Check each pattern in order
+        for pattern in self.patterns:
+            if pattern.matches(path_str):
+                # Negated patterns un-ignore
+                ignored = not pattern.is_negated
+                
+        return ignored
 
 
 class CodeElement:
@@ -195,6 +325,7 @@ class CodebaseParser:
         self.project_path = project_path
         self.structure = CodebaseStructure(project_path)
         self.visited_files: Set[str] = set()
+        self.ignore_patterns = IgnorePatternList(project_path)
         
     def parse(self) -> CodebaseStructure:
         """
@@ -204,11 +335,17 @@ class CodebaseParser:
             CodebaseStructure: Structure containing all parsed code elements
         """
         # Find all Python files
-        for root, _, files in os.walk(self.project_path):
+        for root, dirs, files in os.walk(self.project_path):
+            # Filter directories in-place to skip ignored directories
+            root_path = Path(root)
+            dirs[:] = [d for d in dirs if not self.ignore_patterns.should_ignore(root_path / d)]
+            
             for file in files:
                 if file.endswith('.py'):
                     file_path = Path(root) / file
-                    self._parse_file(file_path)
+                    # Skip ignored files
+                    if not self.ignore_patterns.should_ignore(file_path):
+                        self._parse_file(file_path)
         
         # Process relationships and calls after all files are parsed
         self._process_relationships()
