@@ -11,6 +11,16 @@ let layoutFixed = false; // Track whether layout is fixed or dynamic
 let clickTimer = null; // For handling click vs double-click
 let clickDelay = 300; // Milliseconds to wait before handling a click
 let linkDistance = 100; // Default link distance
+
+// Selection tool variables
+let selectedNodes = new Set(); // Set of selected node IDs
+let selectionMode = 'pointer'; // Current selection mode: 'pointer', 'box', or 'lasso'
+let selectionStartPoint = null; // Starting point for box/lasso selection
+let selectionRect = null; // D3 selection rectangle element
+let selectionLasso = null; // D3 lasso selection element
+let lassoPoints = []; // Points for lasso selection
+let isSelecting = false; // Whether a selection is in progress
+
 let visibleTypes = {
     module: true,
     class: true,
@@ -57,6 +67,16 @@ const toggleInherits = document.getElementById('toggle-inherits');
 const toggleCallAnimations = document.getElementById('toggle-call-animations');
 const toggleImportAnimations = document.getElementById('toggle-import-animations');
 const toggleInheritAnimations = document.getElementById('toggle-inherit-animations');
+
+// Selection tool elements
+const pointerTool = document.getElementById('pointer-tool');
+const boxSelectTool = document.getElementById('box-select-tool');
+const lassoSelectTool = document.getElementById('lasso-select-tool');
+const selectionActions = document.querySelector('.selection-actions');
+const selectedCountEl = document.getElementById('selected-count');
+const fixSelectedButton = document.getElementById('fix-selected');
+const releaseSelectedButton = document.getElementById('release-selected');
+const clearSelectionButton = document.getElementById('clear-selection');
 
 // Global variables
 const searchDropdown = document.getElementById('search-results-dropdown');
@@ -258,12 +278,42 @@ function setupEventListeners() {
             // Update link distance in the simulation
             if (simulation && simulation.force('link')) {
                 linkDistance = newDistance;
-                simulation.force('link').distance(newDistance);
+                
+                // Apply distance conditionally based on selection
+                if (selectedNodes.size > 0) {
+                    // Apply only to edges connecting selected nodes
+                    simulation.force('link').distance(d => {
+                        const sourceIsSelected = selectedNodes.has(d.source.id || d.source);
+                        const targetIsSelected = selectedNodes.has(d.target.id || d.target);
+                        
+                        // If both nodes are selected, apply the new distance
+                        if (sourceIsSelected && targetIsSelected) {
+                            return newDistance;
+                        }
+                        
+                        // Otherwise, maintain existing distances
+                        return d.distance || linkDistance;
+                    });
+                } else {
+                    // Apply to all edges
+                    simulation.force('link').distance(newDistance);
+                }
+                
                 simulation.alpha(0.3).restart(); // Restart with some activity
             }
         });
     }
 
+    // Selection tool event listeners
+    pointerTool.addEventListener('click', () => setSelectionMode('pointer'));
+    boxSelectTool.addEventListener('click', () => setSelectionMode('box'));
+    lassoSelectTool.addEventListener('click', () => setSelectionMode('lasso'));
+    
+    // Selection action buttons
+    fixSelectedButton.addEventListener('click', fixSelectedNodes);
+    releaseSelectedButton.addEventListener('click', releaseSelectedNodes);
+    clearSelectionButton.addEventListener('click', clearSelection);
+    
     // Close dropdown when clicking outside
     document.addEventListener('click', function(event) {
         if (!searchInput.contains(event.target) && 
@@ -310,7 +360,11 @@ function initializeGraph() {
     
     // Create the force simulation
     simulation = d3.forceSimulation()
-        .force('link', d3.forceLink().id(d => d.id).distance(linkDistance).strength(0.5))
+        .force('link', d3.forceLink().id(d => d.id).distance(d => {
+            // Store the initial distance for each link
+            d.distance = linkDistance;
+            return linkDistance;
+        }).strength(0.5))
         .force('charge', d3.forceManyBody().strength(-100))
         .force('center', d3.forceCenter(
             graphContainer.clientWidth / 2,
@@ -376,13 +430,42 @@ function initializeGraph() {
     nodeGroups.on('click', function(event, d) {
         // Detect if it's a double-click
         if (event.detail === 2) {
-            // This is a double-click - release the node
-            d.fx = null;
-            d.fy = null;
-            // Update styling
-            d3.select(this).classed('fixed-node', false);
-            // Restart the simulation with some activity
-            simulation.alpha(0.3).restart();
+            // This is a double-click - behavior depends on mode
+            if (selectionMode === 'pointer') {
+                // In pointer mode, double-click releases the node
+                d.fx = null;
+                d.fy = null;
+                // Update styling
+                d3.select(this).classed('fixed-node', false);
+                // Restart the simulation with some activity
+                simulation.alpha(0.3).restart();
+            } else {
+                // In selection modes, double-click toggles fixed state of selected nodes
+                if (selectedNodes.has(d.id)) {
+                    // If this node is selected, toggle fixed state of all selected nodes
+                    const shouldFix = d.fx === null; // If this node is unfixed, fix all selected nodes
+                    
+                    graph.nodes.forEach(node => {
+                        if (selectedNodes.has(node.id)) {
+                            if (shouldFix) {
+                                // Fix the node
+                                node.fx = node.x;
+                                node.fy = node.y;
+                            } else {
+                                // Release the node
+                                node.fx = null;
+                                node.fy = null;
+                            }
+                        }
+                    });
+                    
+                    // Update styling
+                    updateFixedNodeStyling();
+                    // Restart the simulation
+                    simulation.alpha(0.3).restart();
+                }
+            }
+            
             // Clear any existing click timer
             if (clickTimer) {
                 clearTimeout(clickTimer);
@@ -606,6 +689,30 @@ function updateFixedNodeStyling() {
 
 // Handle node click event
 function nodeClicked(event, node) {
+    // Check if we're in multi-select mode (box or lasso)
+    if (selectionMode !== 'pointer') {
+        // In selection modes, the click should add/remove from selection
+        const isShiftKey = event.sourceEvent && event.sourceEvent.shiftKey;
+        
+        if (selectedNodes.has(node.id)) {
+            // If already selected, remove it
+            selectedNodes.delete(node.id);
+        } else {
+            // If not selected, add it
+            // But clear previous selection first if shift isn't pressed
+            if (!isShiftKey) {
+                selectedNodes.clear();
+            }
+            selectedNodes.add(node.id);
+        }
+        
+        // Update node styling and UI
+        updateNodeSelection();
+        updateSelectionUI();
+        return;
+    }
+    
+    // For pointer mode, proceed with the original single-selection behavior
     // Check if this is the same node that was already selected
     const isSameNode = selectedNode && selectedNode.id === node.id;
     
@@ -892,4 +999,273 @@ function resetNodePositions() {
             updateFixedNodeStyling();
         }
     }
+}
+
+// ==================== SELECTION FUNCTIONALITY ====================
+
+// Set the current selection mode and update UI
+function setSelectionMode(mode) {
+    selectionMode = mode;
+    
+    // Clear any existing selection
+    if (selectionRect) {
+        selectionRect.remove();
+        selectionRect = null;
+    }
+    
+    if (selectionLasso) {
+        selectionLasso.remove();
+        selectionLasso = null;
+    }
+    
+    // Update active class on buttons
+    pointerTool.classList.toggle('active', mode === 'pointer');
+    boxSelectTool.classList.toggle('active', mode === 'box');
+    lassoSelectTool.classList.toggle('active', mode === 'lasso');
+    
+    // Update cursor style
+    if (svg) {
+        svg.style('cursor', mode === 'pointer' ? 'default' : 'crosshair');
+    }
+    
+    // Setup the appropriate selection behavior
+    if (svg) {
+        // Remove previous event listeners
+        svg.on('mousedown.selection', null)
+           .on('mousemove.selection', null)
+           .on('mouseup.selection', null);
+        
+        // Add new event listeners based on mode
+        if (mode === 'box' || mode === 'lasso') {
+            svg.on('mousedown.selection', startSelection)
+               .on('mousemove.selection', updateSelection)
+               .on('mouseup.selection', endSelection);
+        }
+    }
+}
+
+// Start a selection operation
+function startSelection(event) {
+    // Skip if not in selection mode or if using pointer tool
+    if (!['box', 'lasso'].includes(selectionMode)) return;
+    
+    // Prevent default behavior and stop propagation
+    event.preventDefault();
+    
+    // Get mouse position relative to SVG
+    const [x, y] = d3.pointer(event);
+    selectionStartPoint = { x, y };
+    isSelecting = true;
+    
+    // Create selection elements
+    if (selectionMode === 'box') {
+        // Create a selection rectangle
+        selectionRect = svg.append('rect')
+            .attr('class', 'selection-overlay')
+            .attr('x', x)
+            .attr('y', y)
+            .attr('width', 0)
+            .attr('height', 0);
+    } else if (selectionMode === 'lasso') {
+        // Initialize lasso points
+        lassoPoints = [{ x, y }];
+        
+        // Create a lasso path
+        selectionLasso = svg.append('path')
+            .attr('class', 'selection-lasso')
+            .attr('d', `M${x},${y}L${x},${y}`);
+    }
+}
+
+// Update the selection during mouse movement
+function updateSelection(event) {
+    if (!isSelecting) return;
+    
+    const [currentX, currentY] = d3.pointer(event);
+    
+    if (selectionMode === 'box' && selectionRect) {
+        // Calculate rectangle parameters
+        const x = Math.min(selectionStartPoint.x, currentX);
+        const y = Math.min(selectionStartPoint.y, currentY);
+        const width = Math.abs(currentX - selectionStartPoint.x);
+        const height = Math.abs(currentY - selectionStartPoint.y);
+        
+        // Update rectangle
+        selectionRect
+            .attr('x', x)
+            .attr('y', y)
+            .attr('width', width)
+            .attr('height', height);
+    } else if (selectionMode === 'lasso' && selectionLasso) {
+        // Add point to lasso
+        lassoPoints.push({ x: currentX, y: currentY });
+        
+        // Update lasso path
+        const path = lassoPoints.map((pt, i) => 
+            (i === 0 ? 'M' : 'L') + pt.x + ',' + pt.y
+        ).join('') + 'Z';
+        
+        selectionLasso.attr('d', path);
+    }
+}
+
+// End the selection operation
+function endSelection(event) {
+    if (!isSelecting) return;
+    isSelecting = false;
+    
+    // Process the selection based on the mode
+    if (selectionMode === 'box' && selectionRect) {
+        // Get rectangle boundaries
+        const rect = selectionRect.node().getBoundingClientRect();
+        const svgRect = svg.node().getBoundingClientRect();
+        
+        // Adjust for SVG position
+        const x1 = rect.left - svgRect.left;
+        const y1 = rect.top - svgRect.top;
+        const x2 = rect.right - svgRect.left;
+        const y2 = rect.bottom - svgRect.top;
+        
+        // Adjust for zoom/pan
+        const invertedX1 = (x1 - currentZoomTransform.x) / currentZoomTransform.k;
+        const invertedY1 = (y1 - currentZoomTransform.y) / currentZoomTransform.k;
+        const invertedX2 = (x2 - currentZoomTransform.x) / currentZoomTransform.k;
+        const invertedY2 = (y2 - currentZoomTransform.y) / currentZoomTransform.k;
+        
+        // Find nodes within the rectangle
+        selectNodesInRegion(node => {
+            return node.x >= invertedX1 && node.x <= invertedX2 && 
+                   node.y >= invertedY1 && node.y <= invertedY2;
+        });
+        
+    } else if (selectionMode === 'lasso' && selectionLasso) {
+        // Convert lasso points to account for zoom/transform
+        const transformedLassoPoints = lassoPoints.map(pt => ({
+            x: (pt.x - currentZoomTransform.x) / currentZoomTransform.k,
+            y: (pt.y - currentZoomTransform.y) / currentZoomTransform.k
+        }));
+        
+        // Find nodes within the lasso
+        selectNodesInRegion(node => isPointInPolygon(node.x, node.y, transformedLassoPoints));
+    }
+    
+    // Remove selection elements
+    if (selectionRect) {
+        selectionRect.remove();
+        selectionRect = null;
+    }
+    
+    if (selectionLasso) {
+        selectionLasso.remove();
+        selectionLasso = null;
+    }
+    
+    // Update UI based on selection
+    updateSelectionUI();
+}
+
+// Function to determine if a point is inside a polygon (for lasso selection)
+function isPointInPolygon(x, y, polygon) {
+    let inside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const xi = polygon[i].x, yi = polygon[i].y;
+        const xj = polygon[j].x, yj = polygon[j].y;
+        
+        const intersect = ((yi > y) != (yj > y)) && 
+                         (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+    }
+    return inside;
+}
+
+// Select nodes in a region based on a test function
+function selectNodesInRegion(testFunction) {
+    // Clear previous selection if we're not adding to it with shift
+    if (!d3.event || !d3.event.sourceEvent || !d3.event.sourceEvent.shiftKey) {
+        clearSelection(false); // Don't update UI yet
+    }
+    
+    // Find visible nodes that match the selection criteria
+    const visibleNodeIds = new Set();
+    nodeElements.each(function(d) {
+        if (getComputedStyle(this).display !== 'none' && testFunction(d)) {
+            visibleNodeIds.add(d.id);
+        }
+    });
+    
+    // Update the selection set
+    visibleNodeIds.forEach(id => selectedNodes.add(id));
+    
+    // Update node styling
+    updateNodeSelection();
+}
+
+// Update the visual styling of selected nodes
+function updateNodeSelection() {
+    nodeElements.classed('selected', d => selectedNodes.has(d.id));
+}
+
+// Update the selection UI (count and action buttons)
+function updateSelectionUI() {
+    const count = selectedNodes.size;
+    selectedCountEl.textContent = count === 1 
+        ? '1 node selected' 
+        : `${count} nodes selected`;
+    
+    // Show/hide the selection actions toolbar
+    selectionActions.style.display = count > 0 ? 'flex' : 'none';
+}
+
+// Clear the current selection
+function clearSelection(updateUI = true) {
+    selectedNodes.clear();
+    updateNodeSelection();
+    
+    // Reset the link distance to apply to all edges
+    if (simulation && simulation.force('link')) {
+        simulation.force('link').distance(linkDistance);
+        simulation.alpha(0.1).restart();
+    }
+    
+    if (updateUI) {
+        updateSelectionUI();
+    }
+}
+
+// Fix the positions of selected nodes
+function fixSelectedNodes() {
+    if (selectedNodes.size === 0) return;
+    
+    // Set fx and fy for each selected node to its current position
+    graph.nodes.forEach(node => {
+        if (selectedNodes.has(node.id)) {
+            node.fx = node.x;
+            node.fy = node.y;
+        }
+    });
+    
+    // Update fixed node styling
+    updateFixedNodeStyling();
+    
+    // Restart the simulation with low alpha
+    simulation.alpha(0.1).restart();
+}
+
+// Release selected nodes
+function releaseSelectedNodes() {
+    if (selectedNodes.size === 0) return;
+    
+    // Set fx and fy to null for each selected node
+    graph.nodes.forEach(node => {
+        if (selectedNodes.has(node.id)) {
+            node.fx = null;
+            node.fy = null;
+        }
+    });
+    
+    // Update fixed node styling
+    updateFixedNodeStyling();
+    
+    // Restart the simulation
+    simulation.alpha(0.3).restart();
 }

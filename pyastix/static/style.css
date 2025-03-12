@@ -32,6 +32,7 @@ header {
     font-weight: bold;
 }
 
+/* Search container */
 .search-container {
     display: flex;
     gap: 5px;
@@ -58,6 +59,90 @@ header {
 
 #search-button:hover {
     background-color: #27ae60;
+}
+
+/* Selection tools styles - now in left panel */
+.selection-tools-container {
+    margin-bottom: 20px;
+}
+
+.selection-tools-container h4 {
+    font-size: 14px;
+    color: #555;
+    margin-bottom: 8px;
+}
+
+.selection-tools {
+    display: flex;
+    gap: 5px;
+    background-color: #f5f5f5;
+    border-radius: 4px;
+    padding: 3px;
+    margin-bottom: 10px;
+}
+
+.tool-button, .action-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    border: none;
+    background-color: transparent;
+    color: #333;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.tool-button:hover, .action-button:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+.tool-button.active {
+    background-color: rgba(0, 123, 255, 0.2);
+    color: #007bff;
+}
+
+.selection-actions {
+    background-color: #f5f5f5;
+    border-radius: 4px;
+    padding: 8px;
+    margin-bottom: 15px;
+}
+
+.selection-action-buttons {
+    display: flex;
+    gap: 5px;
+    margin-top: 5px;
+}
+
+#selected-count {
+    font-size: 13px;
+    color: #555;
+    display: block;
+    margin-bottom: 3px;
+}
+
+/* Selection overlay styles */
+.selection-overlay {
+    fill: rgba(65, 105, 225, 0.1);
+    stroke: #4169e1;
+    stroke-width: 1px;
+    pointer-events: none;
+}
+
+.selection-lasso {
+    fill: rgba(65, 105, 225, 0.1);
+    stroke: #4169e1;
+    stroke-width: 1px;
+    pointer-events: none;
+}
+
+/* Selected node styles */
+.node.selected circle {
+    stroke: #4169e1;
+    stroke-width: 3px;
 }
 
 /* Main content */
@@ -597,6 +682,16 @@ svg {
 .settings-section {
     margin-top: 12px;
     width: 100%;
+}
+
+.settings-section h4 {
+    font-size: 14px;
+    color: #555;
+    margin: 15px 0 8px 0;
+}
+
+.settings-section h4:first-child {
+    margin-top: 0;
 }
 
 .input-row {

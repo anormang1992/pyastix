@@ -97,6 +97,50 @@
             <div class="panel-section">
                 <h3>Layout</h3>
                 <div class="settings-section">
+                    <div class="selection-tools-container">
+                        <h4>Selection Tools</h4>
+                        <div class="selection-tools">
+                            <button id="pointer-tool" class="tool-button active" title="Pointer (Single Selection)">
+                                <svg viewBox="0 0 24 24" width="18" height="18">
+                                    <path d="M7,2l12,11.2l-5.8,0.5l3.3,7.3l-2.2,1l-3.2-7.4L7,18.5V2" fill="currentColor"/>
+                                </svg>
+                            </button>
+                            <button id="box-select-tool" class="tool-button" title="Box Selection">
+                                <svg viewBox="0 0 24 24" width="18" height="18">
+                                    <rect x="4" y="4" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="2"/>
+                                </svg>
+                            </button>
+                            <button id="lasso-select-tool" class="tool-button" title="Lasso Selection">
+                                <svg viewBox="0 0 24 24" width="18" height="18">
+                                    <path d="M7,6 C3,10 4,16 9,18 C15,20 20,17 21,13 C22,9 20,4 16,5 C12,6 11,12 10,8 C9,4 11,2 7,6 Z" fill="none" stroke="currentColor" stroke-width="2"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="selection-actions" style="display: none">
+                            <span id="selected-count">0 nodes selected</span>
+                            <div class="selection-action-buttons">
+                                <button id="fix-selected" class="action-button" title="Fix Selected Nodes">
+                                    <svg viewBox="0 0 24 24" width="18" height="18">
+                                        <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="2"/>
+                                        <circle cx="12" cy="12" r="3" fill="currentColor"/>
+                                    </svg>
+                                </button>
+                                <button id="release-selected" class="action-button" title="Release Selected Nodes">
+                                    <svg viewBox="0 0 24 24" width="18" height="18">
+                                        <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/>
+                                        <path d="M8,12 L16,12 M12,8 L12,16" stroke="currentColor" stroke-width="2"/>
+                                    </svg>
+                                </button>
+                                <button id="clear-selection" class="action-button" title="Clear Selection">
+                                    <svg viewBox="0 0 24 24" width="18" height="18">
+                                        <path d="M6,6 L18,18 M6,18 L18,6" stroke="currentColor" stroke-width="2"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h4>Node Positions</h4>
                     <div class="input-row">
                         <input type="checkbox" id="toggle-fixed-layout">
                         <label for="toggle-fixed-layout">Fix All Node Positions</label>
@@ -104,6 +148,8 @@
                     <div class="button-row">
                         <button id="release-all-nodes">Release All Nodes</button>
                     </div>
+                    
+                    <h4>Edge Distance</h4>
                     <div class="slider-container">
                         <label for="link-distance-slider">
                             <span>Edge Distance</span>
@@ -111,7 +157,8 @@
                         </label>
                         <input type="range" id="link-distance-slider" min="20" max="500" value="100" class="slider">
                     </div>
-                    <p class="tip">Tip: Double-click on nodes to release them individually. Adjust edge length to make the graph more compact or spread out.</p>
+                    <p class="tip">Tip: Use selection tools with the Alt key to select multiple nodes. Double-click nodes to release 
+                    them. Edge distance adjustments apply only to selected nodes when a selection exists.</p>
                 </div>
             </div>
         </div>
