@@ -96,13 +96,22 @@
             
             <div class="panel-section">
                 <h3>Layout</h3>
-                <div class="toggle-container">
-                    <label class="toggle-item">
+                <div class="settings-section">
+                    <div class="input-row">
                         <input type="checkbox" id="toggle-fixed-layout">
-                        <span class="toggle-label">Fix All Node Positions</span>
-                    </label>
-                    <button id="release-all-nodes" class="control-button">Release All Nodes</button>
-                    <p class="tip">Tip: Double-click any node to release it individually</p>
+                        <label for="toggle-fixed-layout">Fix All Node Positions</label>
+                    </div>
+                    <div class="button-row">
+                        <button id="release-all-nodes">Release All Nodes</button>
+                    </div>
+                    <div class="slider-container">
+                        <label for="link-distance-slider">
+                            <span>Edge Distance</span>
+                            <div class="slider-value" id="link-distance-value">100</div>
+                        </label>
+                        <input type="range" id="link-distance-slider" min="20" max="500" value="100" class="slider">
+                    </div>
+                    <p class="tip">Tip: Double-click on nodes to release them individually. Adjust edge length to make the graph more compact or spread out.</p>
                 </div>
             </div>
         </div>

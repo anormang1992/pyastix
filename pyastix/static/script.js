@@ -10,6 +10,7 @@ let selectedNode = null;
 let layoutFixed = false; // Track whether layout is fixed or dynamic
 let clickTimer = null; // For handling click vs double-click
 let clickDelay = 300; // Milliseconds to wait before handling a click
+let linkDistance = 100; // Default link distance
 let visibleTypes = {
     module: true,
     class: true,
@@ -83,6 +84,8 @@ function fetchGraphData() {
         .then(response => response.json())
         .then(data => {
             graph = data;
+            // Ensure nodes are not fixed on initialization
+            resetNodePositions();
             initializeGraph();
         })
         .catch(error => console.error('Error fetching graph data:', error));
@@ -239,6 +242,28 @@ function setupEventListeners() {
         simulation.alpha(0.5).restart();
     });
 
+    // Link distance slider
+    const linkDistanceSlider = document.getElementById('link-distance-slider');
+    const linkDistanceValue = document.getElementById('link-distance-value');
+    
+    if (linkDistanceSlider) {
+        // Initialize with current value
+        linkDistanceValue.textContent = linkDistanceSlider.value;
+        
+        // Update when slider is moved
+        linkDistanceSlider.addEventListener('input', function() {
+            const newDistance = parseInt(this.value);
+            linkDistanceValue.textContent = newDistance;
+            
+            // Update link distance in the simulation
+            if (simulation && simulation.force('link')) {
+                linkDistance = newDistance;
+                simulation.force('link').distance(newDistance);
+                simulation.alpha(0.3).restart(); // Restart with some activity
+            }
+        });
+    }
+
     // Close dropdown when clicking outside
     document.addEventListener('click', function(event) {
         if (!searchInput.contains(event.target) && 
@@ -285,7 +310,7 @@ function initializeGraph() {
     
     // Create the force simulation
     simulation = d3.forceSimulation()
-        .force('link', d3.forceLink().id(d => d.id).distance(100).strength(0.5))
+        .force('link', d3.forceLink().id(d => d.id).distance(linkDistance).strength(0.5))
         .force('charge', d3.forceManyBody().strength(-100))
         .force('center', d3.forceCenter(
             graphContainer.clientWidth / 2,
@@ -325,6 +350,9 @@ function initializeGraph() {
             .on('start', dragStarted)
             .on('drag', dragging)
             .on('end', dragEnded));
+    
+    // Store node elements for later reference
+    nodeElements = nodeGroups;
     
     // Add circles to nodes
     nodeGroups.append('circle')
@@ -372,9 +400,6 @@ function initializeGraph() {
             }, clickDelay);
         }
     });
-    
-    // Save node elements for updates
-    nodeElements = nodeGroups;
     
     // Start the simulation
     simulation.nodes(graph.nodes).on('tick', ticked);
@@ -849,4 +874,22 @@ function updateVisibility() {
 // Helper function to capitalize first letter
 function capitalizeFirstLetter(string) {
     return string.charAt(0).toUpperCase() + string.slice(1);
+}
+
+// Helper function to ensure nodes start in an unfixed state
+function resetNodePositions() {
+    if (!graph || !graph.nodes) return;
+    
+    // Make sure all nodes are unfixed unless explicitly set to fixed
+    if (!layoutFixed) {
+        graph.nodes.forEach(node => {
+            node.fx = null;
+            node.fy = null;
+        });
+        
+        // Update styling if elements exist
+        if (nodeElements) {
+            updateFixedNodeStyling();
+        }
+    }
 }
