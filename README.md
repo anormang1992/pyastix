@@ -43,6 +43,11 @@ This will analyze your codebase, generate a visualization, and open it in your d
 
 To visualize your codebase directly in the terminal:
 
+![image](https://github.com/user-attachments/assets/60b57c83-be09-407c-997c-c4293a34278b)
+
+![image](https://github.com/user-attachments/assets/8f82e227-3315-46e1-8d2c-2ce365396f43)
+
+
 ```bash
 pyastix /path/to/your/project --terminal
 ```
