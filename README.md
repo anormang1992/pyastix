@@ -144,14 +144,18 @@ pytest
 ```
 pyastix/
 ├── pyastix/            # Main package
-│   ├── __init__.py     # Package initialization
-│   ├── cli.py          # Command-line interface 
+│   ├── __init__.py     # Package initialization and version
+│   ├── cli.py          # Command-line interface
 │   ├── parser.py       # Code parsing module
 │   ├── graph.py        # Graph generation module
-│   ├── web_interface.py # Web visualization module
-│   ├── terminal_renderer.py # Terminal visualization module
-│   ├── templates/      # HTML templates
-│   └── static/         # CSS, JS, and other static files
+│   ├── interfaces/     # Visualization interfaces
+│   │   ├── __init__.py
+│   │   ├── web_interface.py          # Web visualization
+│   │   └── terminal_interface.py     # Terminal visualization
+│   └── static/         # Web assets
+│       ├── css/        # Stylesheets
+│       ├── js/         # JavaScript files
+│       └── templates/  # HTML templates
 ├── tests/              # Test suite
 ├── examples/           # Example usage scripts
 ├── pyproject.toml      # Project configuration

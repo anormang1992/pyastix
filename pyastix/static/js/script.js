@@ -159,9 +159,122 @@ function fetchGraphData() {
             graph = data;
             // Ensure nodes are not fixed on initialization
             resetNodePositions();
+            
+            // Handle focus node if provided from server
+            if (data.focusNodeId) {
+                // Pre-position the focus node near the center for better initial layout
+                const focusNode = graph.nodes.find(n => n.id === data.focusNodeId);
+                if (focusNode) {
+                    // Position at center with slight offset to avoid congestion
+                    focusNode.x = graphContainer.clientWidth / 2 + 20;
+                    focusNode.y = graphContainer.clientHeight / 2 + 20;
+                    // Fix its position initially to make it the layout anchor
+                    focusNode.fx = focusNode.x;
+                    focusNode.fy = focusNode.y;
+                }
+            }
+            
+            // Initialize graph after setting up the focus node position
             initializeGraph();
+            
+            // If there's a focus node, handle it immediately
+            if (data.focusNodeId) {
+                // Get the node
+                const focusNode = graph.nodes.find(n => n.id === data.focusNodeId);
+                if (focusNode) {
+                    // Ensure the node type is visible
+                    if (!visibleTypes[focusNode.type]) {
+                        visibleTypes[focusNode.type] = true;
+                        document.getElementById(`toggle-${focusNode.type}s`).checked = true;
+                        updateVisibility();
+                    }
+                    
+                    // Allow a small delay for the DOM to update after initialization
+                    setTimeout(() => {
+                        // Direct jump to node without animation for initial focus
+                        directFocusOnNode(focusNode);
+                    }, 200); // Shorter delay, just enough for the DOM to be ready
+                }
+            }
         })
         .catch(error => console.error('Error fetching graph data:', error));
+}
+
+// Direct focus on a node without animation for initial load
+function directFocusOnNode(node) {
+    // Apply a more controlled zoom transformation
+    if (node.x && node.y) {
+        const scale = 1.5; // Slightly lower zoom for better context
+        
+        // Center the node with a clean transform
+        const transform = d3.zoomIdentity
+            .translate(
+                graphContainer.clientWidth / 2 - node.x * scale,
+                graphContainer.clientHeight / 2 - node.y * scale
+            )
+            .scale(scale);
+        
+        // Apply the transform immediately
+        svg.call(zoom.transform, transform);
+        
+        // Mark the node as both fixed and selected (preserve fixed position)
+        // We'll keep it fixed but show it as selected
+        
+        // Then simulate a click on the node
+        simulateNodeClick(node);
+        
+        // Ensure selected node has the correct styling
+        updateFixedNodeStyling();
+        
+        // Apply proper highlight to the selected node
+        nodeElements.selectAll('circle')
+            .style('stroke', d => d.id === node.id ? CONFIG.highlightColor : '#fff')
+            .style('stroke-width', d => d.id === node.id ? 3 : 2);
+            
+        // Stabilize the layout gently
+        setTimeout(() => {
+            simulation.alpha(0.1).restart();
+        }, 500);
+    } else {
+        // Fallback: just click the node
+        simulateNodeClick(node);
+    }
+}
+
+// Focus on a specific node (for search, etc.)
+function focusOnNode(nodeId) {
+    // Find the node
+    const node = graph.nodes.find(n => n.id === nodeId);
+    if (!node) return;
+    
+    // Ensure the node type is visible
+    if (!visibleTypes[node.type]) {
+        visibleTypes[node.type] = true;
+        document.getElementById(`toggle-${node.type}s`).checked = true;
+        updateVisibility();
+    }
+    
+    // First zoom to the node
+    if (node.x && node.y) {
+        const scale = 1.8; // Slightly higher zoom level for search results
+        const transform = d3.zoomIdentity
+            .translate(
+                graphContainer.clientWidth / 2 - node.x * scale,
+                graphContainer.clientHeight / 2 - node.y * scale
+            )
+            .scale(scale);
+        
+        svg.transition()
+            .duration(CONFIG.transitionDuration)
+            .call(zoom.transform, transform)
+            .on('end', () => {
+                // When zoom transition completes, simulate a click on the node
+                simulateNodeClick(node);
+            });
+    } else {
+        // If node doesn't have coordinates yet, just simulate the click
+        simulateNodeClick(node);
+    }
 }
 
 // Get incoming call count for a node
@@ -798,9 +911,25 @@ function dragEnded(event, d) {
 function updateFixedNodeStyling() {
     if (!nodeElements) return;
     
-    nodeElements.classed('fixed-node', function(d) {
-        // A node is considered fixed if it has fx and fy coordinates set
-        return d.fx !== null && d.fy !== null;
+    // First, remove both classes from all nodes to reset state
+    nodeElements
+        .classed('fixed-node', false)
+        .classed('fixed-selected-node', false);
+    
+    // Then apply the appropriate class based on node state
+    nodeElements.each(function(d) {
+        const nodeElement = d3.select(this);
+        const isFixed = d.fx !== null && d.fy !== null;
+        const isSelected = selectedNode && d.id === selectedNode.id;
+        
+        if (isFixed && isSelected) {
+            // Both fixed and selected - apply special combined class
+            nodeElement.classed('fixed-selected-node', true);
+        } else if (isFixed) {
+            // Only fixed
+            nodeElement.classed('fixed-node', true);
+        }
+        // If only selected, no extra class needed as it's handled by circle styling
     });
 }
 
@@ -992,42 +1121,6 @@ function displaySearchResults(results, query) {
     searchDropdown.classList.add('active');
 }
 
-// Focus on a specific node
-function focusOnNode(nodeId) {
-    // Find the node
-    const node = graph.nodes.find(n => n.id === nodeId);
-    if (!node) return;
-    
-    // Ensure the node type is visible
-    if (!visibleTypes[node.type]) {
-        visibleTypes[node.type] = true;
-        document.getElementById(`toggle-${node.type}s`).checked = true;
-        updateVisibility();
-    }
-    
-    // First zoom to the node
-    if (node.x && node.y) {
-        const scale = 1.8; // Slightly higher zoom level for search results
-        const transform = d3.zoomIdentity
-            .translate(
-                graphContainer.clientWidth / 2 - node.x * scale,
-                graphContainer.clientHeight / 2 - node.y * scale
-            )
-            .scale(scale);
-        
-        svg.transition()
-            .duration(CONFIG.transitionDuration)
-            .call(zoom.transform, transform)
-            .on('end', () => {
-                // When zoom transition completes, simulate a click on the node
-                simulateNodeClick(node);
-            });
-    } else {
-        // If node doesn't have coordinates yet, just simulate the click
-        simulateNodeClick(node);
-    }
-}
-
 // Simulate a click on a node, ensuring the code panel opens
 function simulateNodeClick(node) {
     // Find the DOM element for this node
@@ -1043,6 +1136,9 @@ function simulateNodeClick(node) {
         
         // Directly call nodeClicked with our node
         nodeClicked(mockEvent, node);
+        
+        // Force update the styling to ensure correct appearance
+        updateFixedNodeStyling();
     }
 }
 

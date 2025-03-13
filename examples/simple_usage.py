@@ -1,47 +1,43 @@
 """
-Simple example of how to use Pyastix.
+Simple example of using Pyastix to analyze a project and visualize the result.
 """
 
-import sys
-import os
+import argparse
 from pathlib import Path
 
-# Add project root to path so we can import pyastix
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from pyastix.parser import CodebaseParser
+from pyastix.parser import CodebaseParser  
 from pyastix.graph import DependencyGraphGenerator
 from pyastix.interfaces.web_interface import WebServer
 
 
 def main():
     """
-    Simple example showing how to use Pyastix to visualize a codebase.
+    Sample script demonstrating how to use pyastix to analyze a project.
     """
-    # Use the test project as our target
-    target_path = Path(__file__).parent.parent / "tests" / "test_project"
+    parser = argparse.ArgumentParser(description='Analyze a Python project')
+    parser.add_argument('project_path', type=str, help='Path to the Python project')
+    parser.add_argument('--port', '-p', type=int, default=8000, help='Port for the web server')
+    parser.add_argument('--module', '-m', type=str, help='Focus on a specific module')
+    args = parser.parse_args()
     
-    print(f"Analyzing project at: {target_path}")
+    # Set target path
+    target_path = Path(args.project_path)
     
     # Parse the codebase
-    parser = CodebaseParser(target_path)
-    codebase_structure = parser.parse()
+    codebase_parser = CodebaseParser(target_path)
+    codebase_structure = codebase_parser.parse()
     
-    # Generate the graph
+    # Generate the dependency graph
     graph_generator = DependencyGraphGenerator(codebase_structure)
-    graph_data = graph_generator.generate()
     
-    print(f"Generated graph with {len(graph_data.nodes)} nodes and {len(graph_data.edges)} edges")
+    if args.module:
+        graph = graph_generator.generate_for_module(args.module)
+    else:
+        graph = graph_generator.generate()
     
     # Start the web server
-    port = 8000
-    print(f"Starting web server on port {port}...")
-    server = WebServer(graph_data, target_path, port=port)
-    
-    # Open browser
+    server = WebServer(graph, target_path, port=args.port, focus_module=args.module)
     server.open_browser()
-    
-    # Start server (this will block until server is stopped)
     server.start()
 
 

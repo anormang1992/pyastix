@@ -4,7 +4,7 @@ Web interface module for visualizing the dependency graph.
 
 import webbrowser
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, List, Any, Optional
 import threading
 from flask import Flask, render_template, jsonify, request, send_from_directory
 
@@ -21,10 +21,11 @@ class WebServer:
         project_path (Path): Root path of the analyzed project
         port (int): Port to run the web server on
     """
-    def __init__(self, graph_data: DependencyGraph, project_path: Path, port: int = 8000):
+    def __init__(self, graph_data: DependencyGraph, project_path: Path, port: int = 8000, focus_module: Optional[str] = None):
         self.graph_data = graph_data
         self.project_path = project_path
         self.port = port
+        self.focus_module = focus_module
         
         # Find template and static directories relative to package root
         package_dir = Path(__file__).parent.parent  # Go up one level to pyastix root
@@ -49,7 +50,21 @@ class WebServer:
         
         @self.app.route('/api/graph')
         def graph():
-            return jsonify(self.graph_data.to_dict())
+            # Include focus module in the response if specified
+            response_data = self.graph_data.to_dict()
+            if self.focus_module:
+                # Find the module node that matches the focus module
+                focus_node_id = None
+                for node in self.graph_data.nodes:
+                    if node.type == "module" and (node.label == self.focus_module or 
+                                                 node.label.endswith("." + self.focus_module)):
+                        focus_node_id = node.id
+                        break
+                
+                if focus_node_id:
+                    response_data["focusNodeId"] = focus_node_id
+            
+            return jsonify(response_data)
         
         @self.app.route('/api/file')
         def file_content():

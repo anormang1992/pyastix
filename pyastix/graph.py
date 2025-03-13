@@ -198,6 +198,11 @@ class DependencyGraphGenerator:
             if edge.source == target_module.id and edge.type == "contains":
                 included_nodes.add(edge.target)
                 module_contents.add(edge.target)
+                
+                # If the child is a class, also include all its methods
+                child_node = next((n for n in self.nodes if n.id == edge.target), None)
+                if child_node and child_node.type == "class":
+                    self._add_class_methods(child_node.id, included_nodes)
         
         # Get direct external dependencies (imports, calls, inheritance) but don't recurse
         for node_id in list(module_contents) + [target_module.id]:
@@ -221,6 +226,13 @@ class DependencyGraphGenerator:
                     included_nodes.add(edge.target)
                     # Also include the parent module of the target
                     self._add_module_container(edge.target, included_nodes)
+        
+        # Process the dependency nodes - for any class dependency, include all its methods
+        dependency_nodes = included_nodes.copy()
+        for node_id in dependency_nodes:
+            node = next((n for n in self.nodes if n.id == node_id), None)
+            if node and node.type == "class":
+                self._add_class_methods(node.id, included_nodes)
         
         # Filter nodes and edges
         filtered_nodes = [node for node in self.nodes if node.id in included_nodes]
@@ -247,6 +259,20 @@ class DependencyGraphGenerator:
                 elif container_node:
                     included_nodes.add(edge.source)
                     self._add_module_container(edge.source, included_nodes)
+    
+    def _add_class_methods(self, class_id: str, included_nodes: Set[str]) -> None:
+        """
+        Add all methods of a class to the included nodes.
+        
+        Args:
+            class_id (str): ID of the class node
+            included_nodes (Set[str]): Set of node IDs to include in the filtered graph
+        """
+        for edge in self.edges:
+            if edge.source == class_id and edge.type == "contains":
+                method_node = next((n for n in self.nodes if n.id == edge.target), None)
+                if method_node and method_node.type == "method":
+                    included_nodes.add(edge.target)
     
     def _create_nodes(self) -> None:
         """

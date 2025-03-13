@@ -510,6 +510,13 @@ svg {
     stroke-dasharray: 3, 3;  /* Dashed stroke pattern */
 }
 
+/* Style for nodes that are both fixed and selected */
+.fixed-selected-node circle {
+    stroke: #e74c3c; /* Red border like selected nodes */
+    stroke-width: 3px;
+    stroke-dasharray: 3, 3;  /* Dashed stroke pattern like fixed nodes */
+}
+
 .node.module circle {
     fill: #3498db;
 }

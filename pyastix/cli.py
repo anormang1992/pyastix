@@ -7,10 +7,10 @@ import sys
 import click
 from pathlib import Path
 
-from pyastix.parser import CodebaseParser
-from pyastix.graph import DependencyGraphGenerator
-from pyastix.interfaces.web_interface import WebServer
-from pyastix.interfaces.terminal_interface import TerminalRenderer
+from .parser import CodebaseParser
+from .graph import DependencyGraphGenerator
+from .interfaces.web_interface import WebServer
+from .interfaces.terminal_interface import TerminalRenderer
 
 
 @click.command()
@@ -56,7 +56,7 @@ def main(project_path, port, browser, module, terminal):
     else:
         # Start the web server
         click.echo(f"Starting web server on port {port}...")
-        server = WebServer(graph_data, project_path, port=port)
+        server = WebServer(graph_data, project_path, port=port, focus_module=module if module else None)
         
         # Open browser if requested
         if browser:
