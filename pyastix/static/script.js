@@ -575,6 +575,9 @@ function updateNodeStats(node) {
         document.getElementById('cyclomatic-complexity').textContent = '-';
         document.getElementById('complexity-rating').textContent = '-';
         document.getElementById('complexity-rating').className = 'stat-value';
+        document.getElementById('maintainability-index').textContent = '-';
+        document.getElementById('maintainability-rating').textContent = '-';
+        document.getElementById('maintainability-rating').className = 'stat-value';
         return;
     }
     
@@ -601,30 +604,60 @@ function updateNodeStats(node) {
     
     // Update complexity metrics - only for functions and methods
     const complexityEl = document.getElementById('cyclomatic-complexity');
-    const ratingEl = document.getElementById('complexity-rating');
-    const complexityRow = document.querySelector('.element-stats .stats-row:last-child');
+    const complexityRatingEl = document.getElementById('complexity-rating');
+    const complexityRow = document.querySelector('.element-stats .stats-row:nth-child(3)');
+    
+    // Maintainability elements
+    const maintainabilityEl = document.getElementById('maintainability-index');
+    const maintainabilityRatingEl = document.getElementById('maintainability-rating');
+    const maintainabilityRow = document.getElementById('maintainability-row');
     
     if (node.type === 'function' || node.type === 'method') {
         // Show complexity section for functions and methods
         complexityRow.style.display = 'flex';
+        // Hide maintainability for non-modules
+        maintainabilityRow.style.display = 'none';
         
         if (node.data.complexity && node.data.complexity >= 0) {
             complexityEl.textContent = node.data.complexity;
-            ratingEl.textContent = node.data.complexity_rating || '-';
+            complexityRatingEl.textContent = node.data.complexity_rating || '-';
             
             // Reset classes and add the appropriate complexity class
-            ratingEl.className = 'stat-value';
+            complexityRatingEl.className = 'stat-value';
             if (node.data.complexity_class) {
-                ratingEl.classList.add(node.data.complexity_class);
+                complexityRatingEl.classList.add(node.data.complexity_class);
             }
         } else {
             complexityEl.textContent = '-';
-            ratingEl.textContent = '-';
-            ratingEl.className = 'stat-value';
+            complexityRatingEl.textContent = '-';
+            complexityRatingEl.className = 'stat-value';
+        }
+    } else if (node.type === 'module') {
+        // Hide complexity section for modules
+        complexityRow.style.display = 'none';
+        // Show maintainability section for modules
+        maintainabilityRow.style.display = 'flex';
+        
+        if (node.data.maintainability_index && node.data.maintainability_index >= 0) {
+            // Format to one decimal place
+            const formattedMI = parseFloat(node.data.maintainability_index).toFixed(1);
+            maintainabilityEl.textContent = formattedMI;
+            maintainabilityRatingEl.textContent = node.data.maintainability_rating || '-';
+            
+            // Reset classes and add the appropriate maintainability class
+            maintainabilityRatingEl.className = 'stat-value';
+            if (node.data.maintainability_class) {
+                maintainabilityRatingEl.classList.add(node.data.maintainability_class);
+            }
+        } else {
+            maintainabilityEl.textContent = '-';
+            maintainabilityRatingEl.textContent = '-';
+            maintainabilityRatingEl.className = 'stat-value';
         }
     } else {
-        // Hide complexity section for modules and classes
+        // Hide both complexity and maintainability sections for other types (e.g., classes)
         complexityRow.style.display = 'none';
+        maintainabilityRow.style.display = 'none';
     }
 }
 

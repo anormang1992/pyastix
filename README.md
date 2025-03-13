@@ -10,7 +10,7 @@ Pyastix is a Python CLI tool that renders Python codebases as stunning, interact
 - **Easy to Use**: Simply run `pyastix <path to project>` to generate and view a dependency graph
 - **Interactive Visualization**: Zoom, pan, and explore your codebase's structure visually
 - **Code Navigation**: Click on any node to view its source code in a side panel
-- **Code Quality Metrics**: View cyclomatic complexity for functions and methods to identify complex code
+- **Code Quality Metrics**: View cyclomatic complexity for functions/methods and maintainability index for modules
 - **Relationship Tracking**: Visualize inheritance, imports, and method calls
 - **Search Functionality**: Find specific modules, classes, or methods and focus on them
 - **Customizable Filters**: Toggle visibility of different code elements
@@ -141,11 +141,11 @@ pyastix/
 
 ## Code Quality Metrics
 
-Pyastix provides insights into code quality through cyclomatic complexity analysis. The complexity score helps identify overly complex functions or methods that might be candidates for refactoring.
+Pyastix provides insights into code quality through cyclomatic complexity analysis powered by the [radon](https://radon.readthedocs.io/) library. The complexity score helps identify overly complex functions or methods that might be candidates for refactoring.
 
 ### Cyclomatic Complexity Calculation
 
-Complexity is calculated using the following rules:
+Complexity is calculated using radon's implementation of McCabe's cyclomatic complexity algorithm, which considers:
 
 - Base complexity of 1 for each function/method
 - +1 for each decision point:
@@ -153,22 +153,39 @@ Complexity is calculated using the following rules:
   - for, while loops
   - except clauses
   - with statements
-  - assert statements
+  - boolean operations (and, or)
   - ternary expressions (x if condition else y)
-  - conditions in list/dict/set comprehensions
+  - comprehension conditions
   - match/case statements (Python 3.10+)
-- +1 for each boolean operator (and, or)
 
 ### Complexity Rating Scale
 
-Complexity scores are categorized according to the following scale:
+Complexity scores are categorized according to radon's rank scale, mapped to Pyastix's rating system:
 
-- **Low (1-5)**: Easy to understand and maintain
-- **Medium (6-10)**: Moderately complex, still manageable
-- **High (11-20)**: Complex code that might benefit from refactoring
-- **Very High (>20)**: Highly complex code that should be refactored
+- **Low (1-5)**: Easy to understand and maintain (radon ranks A and B)
+- **Medium (6-10)**: Moderately complex, still manageable (radon rank C)
+- **High (11-20)**: Complex code that might benefit from refactoring (radon ranks D and E)
+- **Very High (>20)**: Highly complex code that should be refactored (radon rank F)
 
-When viewing a function or method in Pyastix, its complexity score and rating are displayed to help identify areas of the codebase that may need attention. 
+When viewing a function or method in Pyastix, its complexity score and rating are displayed to help identify areas of the codebase that may need attention.
+
+### Maintainability Index
+
+For modules, Pyastix calculates a Maintainability Index (MI) - a composite metric that indicates how maintainable a codebase is. This metric considers:
+
+- Cyclomatic complexity
+- Halstead volume (code size and complexity)
+- Lines of code
+- Comments percentage
+
+The MI is displayed on a scale from 0-100, where higher values represent more maintainable code:
+
+- **Highly Maintainable (75-100)**: Easy to maintain, well-structured code (radon rank A)
+- **Maintainable (65-75)**: Reasonably maintainable code (radon rank B)
+- **Moderately Maintainable (40-65)**: Some maintenance challenges (radon rank C)
+- **Difficult to Maintain (0-40)**: Significant maintenance issues, refactoring recommended (radon rank F)
+
+Modules with low maintainability scores are good candidates for refactoring or closer inspection.
 
 ## Examples
 

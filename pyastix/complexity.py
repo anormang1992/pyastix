@@ -1,176 +1,19 @@
 """
-Provides utilities for calculating code metrics like cyclomatic complexity.
+Provides utilities for calculating code metrics like cyclomatic complexity,
+now using the radon library.
 """
 
-import ast
-import sys
-from typing import Dict, Any, Tuple, List
+import os
+from typing import Dict, Any, Tuple, List, Optional
 
-
-class ComplexityVisitor(ast.NodeVisitor):
-    """
-    AST visitor that calculates the cyclomatic complexity of Python code.
-    
-    Cyclomatic complexity is calculated by counting:
-    - 1 for the method/function itself
-    - +1 for each if, elif, for, while, except, with, assert
-    - +1 for each boolean operator (and, or)
-    - +1 for each ternary operation (x if condition else y)
-    - +1 for each comprehension condition
-    - +1 for each match/case statement
-    """
-    def __init__(self):
-        """
-        Initialize the visitor with a complexity counter.
-        """
-        self.complexity = 1  # Start at 1 for the function/method itself
-        
-    def visit_If(self, node):
-        """
-        Count if and elif statements.
-        
-        Args:
-            node (ast.If): The AST node to visit
-        """
-        self.complexity += 1
-        # Count elif statements
-        temp = node
-        while getattr(temp, 'orelse', None) and len(temp.orelse) == 1 and isinstance(temp.orelse[0], ast.If):
-            self.complexity += 1
-            temp = temp.orelse[0]
-        # Visit children
-        self.generic_visit(node)
-        
-    def visit_For(self, node):
-        """
-        Count for loops.
-        
-        Args:
-            node (ast.For): The AST node to visit
-        """
-        self.complexity += 1
-        self.generic_visit(node)
-        
-    def visit_While(self, node):
-        """
-        Count while loops.
-        
-        Args:
-            node (ast.While): The AST node to visit
-        """
-        self.complexity += 1
-        self.generic_visit(node)
-        
-    def visit_ExceptHandler(self, node):
-        """
-        Count except clauses.
-        
-        Args:
-            node (ast.ExceptHandler): The AST node to visit
-        """
-        self.complexity += 1
-        self.generic_visit(node)
-        
-    def visit_With(self, node):
-        """
-        Count with statements.
-        
-        Args:
-            node (ast.With): The AST node to visit
-        """
-        self.complexity += 1
-        self.generic_visit(node)
-        
-    def visit_Assert(self, node):
-        """
-        Count assert statements.
-        
-        Args:
-            node (ast.Assert): The AST node to visit
-        """
-        self.complexity += 1
-        self.generic_visit(node)
-        
-    def visit_BoolOp(self, node):
-        """
-        Count boolean operations (and, or).
-        
-        Args:
-            node (ast.BoolOp): The AST node to visit
-        """
-        # Add complexity for each boolean operator (n-1 where n is the number of values)
-        self.complexity += len(node.values) - 1
-        self.generic_visit(node)
-    
-    def visit_IfExp(self, node):
-        """
-        Count ternary expressions (x if condition else y).
-        
-        Args:
-            node (ast.IfExp): The AST node to visit
-        """
-        self.complexity += 1
-        self.generic_visit(node)
-    
-    def visit_ListComp(self, node):
-        """
-        Count list comprehensions with conditions.
-        
-        Args:
-            node (ast.ListComp): The AST node to visit
-        """
-        # Add complexity for each 'if' condition in comprehension generators
-        for generator in node.generators:
-            self.complexity += len(generator.ifs)
-        self.generic_visit(node)
-    
-    def visit_DictComp(self, node):
-        """
-        Count dictionary comprehensions with conditions.
-        
-        Args:
-            node (ast.DictComp): The AST node to visit
-        """
-        # Add complexity for each 'if' condition in comprehension generators
-        for generator in node.generators:
-            self.complexity += len(generator.ifs)
-        self.generic_visit(node)
-    
-    def visit_SetComp(self, node):
-        """
-        Count set comprehensions with conditions.
-        
-        Args:
-            node (ast.SetComp): The AST node to visit
-        """
-        # Add complexity for each 'if' condition in comprehension generators
-        for generator in node.generators:
-            self.complexity += len(generator.ifs)
-        self.generic_visit(node)
-
-
-# Dynamically add the Match handler for Python 3.10+
-if sys.version_info >= (3, 10):
-    def visit_match(self, node):
-        """
-        Count match/case statements (Python 3.10+).
-        
-        Args:
-            node (ast.Match): The AST node to visit
-        """
-        # Base complexity for the match statement
-        self.complexity += 1
-        # Each case adds a branch
-        self.complexity += len(node.cases)
-        self.generic_visit(node)
-    
-    # Add the method to the class
-    setattr(ComplexityVisitor, 'visit_Match', visit_match)
+from radon.complexity import cc_visit, cc_rank
+from radon.metrics import mi_visit, mi_rank
+from radon.visitors import Function, Class
 
 
 def calculate_complexity(code: str) -> int:
     """
-    Calculate the cyclomatic complexity of a code string.
+    Calculate the cyclomatic complexity of a code string using radon.
     
     Args:
         code (str): The code to analyze
@@ -179,18 +22,26 @@ def calculate_complexity(code: str) -> int:
         int: The cyclomatic complexity score
     """
     try:
-        tree = ast.parse(code)
-        visitor = ComplexityVisitor()
-        visitor.visit(tree)
-        return visitor.complexity
-    except SyntaxError:
+        # Parse the code and get the blocks
+        blocks = list(cc_visit(code))
+        
+        # If no blocks, this is probably just a file with imports or declarations
+        # In this case, complexity is minimal
+        if not blocks:
+            return 1
+        
+        # For the entire file, use the average complexity of all blocks
+        # (radon doesn't have a "file-level" complexity directly)
+        total_complexity = sum(block.complexity for block in blocks)
+        return total_complexity // len(blocks)
+    except Exception:
         # Return -1 for code that cannot be parsed
         return -1
 
 
 def get_complexity_rating(complexity: int) -> Tuple[str, str]:
     """
-    Get a qualitative rating for a complexity score.
+    Get a qualitative rating for a complexity score based on radon's rankings.
     
     Args:
         complexity (int): The cyclomatic complexity score
@@ -199,20 +50,72 @@ def get_complexity_rating(complexity: int) -> Tuple[str, str]:
         Tuple[str, str]: A tuple containing (rating, css_class)
     """
     if complexity < 0:
-        return "Unknown", ""
-    elif complexity <= 5:
+        return "N/A", ""
+    
+    rank = cc_rank(complexity)
+    
+    # Map radon's rankings to our own
+    if rank == 'A':
         return "Low", "complexity-low"
-    elif complexity <= 10:
+    elif rank == 'B':
+        return "Low", "complexity-low"
+    elif rank == 'C':
         return "Medium", "complexity-medium"
-    elif complexity <= 20:
+    elif rank == 'D':
         return "High", "complexity-high"
-    else:
+    elif rank == 'E':
+        return "High", "complexity-high"
+    else:  # F
         return "Very High", "complexity-very-high"
+
+
+def calculate_maintainability_index(code: str) -> float:
+    """
+    Calculate the maintainability index of a code string using radon.
+    
+    Args:
+        code (str): The code to analyze
+        
+    Returns:
+        float: The maintainability index score (0-100)
+    """
+    try:
+        # Calculate maintainability index
+        mi_score = mi_visit(code, multi=True)
+        return mi_score
+    except Exception:
+        # Return -1 for code that cannot be parsed
+        return -1.0
+
+
+def get_maintainability_rating(mi_score: float) -> Tuple[str, str]:
+    """
+    Get a qualitative rating for a maintainability index score.
+    
+    Args:
+        mi_score (float): The maintainability index score
+        
+    Returns:
+        Tuple[str, str]: A tuple containing (rating, css_class)
+    """
+    if mi_score < 0:
+        return "N/A", ""
+    
+    # Use our own rating scale rather than radon's built-in rank
+    # This matches what we document in the README
+    if mi_score >= 75:
+        return "Highly Maintainable", "maintainability-high"
+    elif mi_score >= 65:
+        return "Maintainable", "maintainability-medium"
+    elif mi_score >= 40:
+        return "Moderately Maintainable", "maintainability-low"
+    else:  # < 40
+        return "Difficult to Maintain", "maintainability-very-low"
 
 
 def calculate_file_complexity(file_path: str) -> Dict[str, Any]:
     """
-    Calculate complexity metrics for a file.
+    Calculate complexity metrics for a file using radon.
     
     Args:
         file_path (str): Path to the file to analyze
@@ -227,23 +130,33 @@ def calculate_file_complexity(file_path: str) -> Dict[str, Any]:
         complexity = calculate_complexity(code)
         rating, css_class = get_complexity_rating(complexity)
         
+        # Calculate maintainability index
+        mi_score = calculate_maintainability_index(code)
+        mi_rating, mi_css_class = get_maintainability_rating(mi_score)
+        
         return {
             "complexity": complexity,
             "rating": rating,
-            "css_class": css_class
+            "css_class": css_class,
+            "maintainability_index": mi_score,
+            "maintainability_rating": mi_rating,
+            "maintainability_class": mi_css_class
         }
     except Exception as e:
         return {
             "complexity": -1,
             "rating": "Error",
             "css_class": "",
+            "maintainability_index": -1,
+            "maintainability_rating": "Error",
+            "maintainability_class": "",
             "error": str(e)
         }
 
 
 def extract_function_complexities(file_path: str) -> Dict[Tuple[int, int], int]:
     """
-    Extract complexity metrics for each function and method in a file.
+    Extract complexity metrics for each function and method in a file using radon.
     
     Args:
         file_path (str): Path to the file to analyze
@@ -255,38 +168,60 @@ def extract_function_complexities(file_path: str) -> Dict[Tuple[int, int], int]:
         with open(file_path, 'r') as f:
             code = f.read()
         
-        tree = ast.parse(code)
         complexity_map = {}
         
-        # Find all functions and methods - both top-level and nested in classes
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                try:
-                    # Get line range
-                    start_line = node.lineno
-                    end_lineno = getattr(node, 'end_lineno', None)
-                    
-                    # If end_lineno is not available (older Python versions), 
-                    # estimate based on function body
-                    if not end_lineno:
-                        max_line = start_line
-                        for sub_node in ast.walk(node):
-                            if hasattr(sub_node, 'lineno'):
-                                max_line = max(max_line, sub_node.lineno)
-                        end_lineno = max_line
-                    
-                    # Calculate the function's complexity directly on the node
-                    visitor = ComplexityVisitor()
-                    visitor.visit(node)
-                    complexity = visitor.complexity
-                    
-                    # Store in map
-                    complexity_map[(start_line, end_lineno)] = complexity
-                    
-                except Exception as e:
-                    print(f"Error calculating complexity for function {getattr(node, 'name', 'unknown')} in {file_path}: {e}")
+        # Get all blocks (functions, methods) from the code
+        blocks = list(cc_visit(code))
+        
+        for block in blocks:
+            # Radon's line numbers are 1-indexed
+            start_line = block.lineno
+            
+            # Radon doesn't provide end_lineno directly, so we estimate it
+            # based on the endcol attribute or just use a reasonable estimate
+            if hasattr(block, 'endline'):
+                end_line = block.endline
+            else:
+                # If no endline, make a conservative guess
+                # Most code blocks are less than 20 lines
+                end_line = start_line + 20
+            
+            # Store the complexity in our map
+            complexity_map[(start_line, end_line)] = block.complexity
         
         return complexity_map
     except Exception as e:
         print(f"Error analyzing file {file_path}: {e}")
-        return {} 
+        return {}
+
+
+def calculate_module_maintainability(file_path: str) -> Dict[str, Any]:
+    """
+    Calculate maintainability index for a module file.
+    
+    Args:
+        file_path (str): Path to the Python file to analyze
+        
+    Returns:
+        Dict[str, Any]: Dictionary with maintainability metrics
+    """
+    try:
+        with open(file_path, 'r') as f:
+            code = f.read()
+        
+        # Calculate maintainability index
+        mi_score = calculate_maintainability_index(code)
+        mi_rating, mi_css_class = get_maintainability_rating(mi_score)
+        
+        return {
+            "maintainability_index": mi_score,
+            "maintainability_rating": mi_rating,
+            "maintainability_class": mi_css_class
+        }
+    except Exception as e:
+        return {
+            "maintainability_index": -1,
+            "maintainability_rating": "Error",
+            "maintainability_class": "",
+            "error": str(e)
+        } 

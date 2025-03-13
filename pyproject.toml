@@ -27,6 +27,7 @@ dependencies = [
     "networkx>=2.8.0",
     "flask>=2.0.0",
     "pyvis>=0.3.0",
+    "radon>=6.0.0",
 ]
 
 [project.scripts]

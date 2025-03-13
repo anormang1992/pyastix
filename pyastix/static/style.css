@@ -747,6 +747,23 @@ svg {
     color: #9c27b0;  /* Purple for very high complexity */
 }
 
+/* Maintainability Index styling */
+.maintainability-high {
+    color: #4caf50;  /* Green for high maintainability */
+}
+
+.maintainability-medium {
+    color: #8bc34a;  /* Light green for medium maintainability */
+}
+
+.maintainability-low {
+    color: #ff9800;  /* Orange for low maintainability */
+}
+
+.maintainability-very-low {
+    color: #f44336;  /* Red for very low maintainability */
+}
+
 /* Help flyout styles */
 .help-flyout {
     position: fixed;

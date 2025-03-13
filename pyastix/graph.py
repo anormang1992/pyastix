@@ -264,7 +264,10 @@ class DependencyGraphGenerator:
                     "end_lineno": module.end_lineno,
                     "complexity": module.complexity,
                     "complexity_rating": module.complexity_rating,
-                    "complexity_class": module.complexity_class
+                    "complexity_class": module.complexity_class,
+                    "maintainability_index": module.maintainability_index,
+                    "maintainability_rating": module.maintainability_rating,
+                    "maintainability_class": module.maintainability_class
                 }
             )
             
@@ -401,6 +404,10 @@ class DependencyGraphGenerator:
                     # Find potential targets by name
                     potential_targets = []
                     
+                    # Skip self.method calls as they're not relevant for functions
+                    if call_name.startswith("self."):
+                        continue
+                    
                     # Check module functions
                     for pot_func in module.functions.values():
                         if pot_func.name == call_name:
@@ -427,7 +434,11 @@ class DependencyGraphGenerator:
             for cls_id, cls in module.classes.items():
                 for method_id, method in cls.methods.items():
                     for call_name, line_number in method.calls:
-                        # Similar simplified call resolution
+                        # Handle self.method calls by extracting the method name
+                        if call_name.startswith("self."):
+                            call_name = call_name.replace("self.", "")
+                        
+                        # For all calls, use the same resolution process
                         potential_targets = []
                         
                         # Check methods in the same class first

@@ -10,7 +10,7 @@ import re
 import fnmatch
 from typing import Dict, List, Set, Tuple, Any, Optional
 
-from .complexity import calculate_complexity, get_complexity_rating, extract_function_complexities
+from .complexity import calculate_complexity, get_complexity_rating, extract_function_complexities, calculate_module_maintainability
 
 
 class IgnorePattern:
@@ -180,6 +180,9 @@ class Module(CodeElement):
         self.classes: Dict[str, Class] = {}
         self.functions: Dict[str, Function] = {}
         self.imports: List[Import] = []
+        self.maintainability_index: float = -1.0
+        self.maintainability_rating: str = "Unknown"
+        self.maintainability_class: str = ""
 
 
 class Class(CodeElement):
@@ -393,6 +396,12 @@ class CodebaseParser:
             module.complexity_rating = "N/A"
             module.complexity_class = ""
             
+            # Calculate maintainability index for the module
+            maintainability_metrics = calculate_module_maintainability(str(file_path))
+            module.maintainability_index = maintainability_metrics["maintainability_index"]
+            module.maintainability_rating = maintainability_metrics["maintainability_rating"]
+            module.maintainability_class = maintainability_metrics["maintainability_class"]
+            
             # Extract complexity metrics for functions and methods, including those in complexity.py itself
             function_complexities = extract_function_complexities(str(file_path))
             
@@ -530,7 +539,21 @@ class CodebaseParser:
         """
         for child_node in node.nodes_of_class(astroid.Call):
             call_name = ""
-            if hasattr(child_node.func, 'as_string'):
+            
+            # Handle method calls through attributes (self.method_name())
+            if isinstance(child_node.func, astroid.Attribute):
+                # Check if it's a self method call
+                if hasattr(child_node.func, 'expr') and hasattr(child_node.func.expr, 'name'):
+                    if child_node.func.expr.name == 'self' and hasattr(child_node.func, 'attrname'):
+                        call_name = child_node.func.attrname
+                        # For method calls through self, we add a special marker
+                        func.calls.append((f"self.{call_name}", child_node.lineno))
+                        continue
+                # For other attribute calls, get the full attribute path
+                if hasattr(child_node.func, 'as_string'):
+                    call_name = child_node.func.as_string()
+            # Regular function calls
+            elif hasattr(child_node.func, 'as_string'):
                 call_name = child_node.func.as_string()
             elif hasattr(child_node.func, 'name'):
                 call_name = child_node.func.name
