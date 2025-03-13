@@ -9,6 +9,7 @@ Pyastix is a Python CLI tool that renders Python codebases as stunning, interact
 
 - **Easy to Use**: Simply run `pyastix <path to project>` to generate and view a dependency graph
 - **Interactive Visualization**: Zoom, pan, and explore your codebase's structure visually
+- **Terminal Mode**: Visualize your codebase directly in the terminal with `--terminal` flag
 - **Code Navigation**: Click on any node to view its source code in a side panel
 - **Code Quality Metrics**: View cyclomatic complexity for functions/methods and maintainability index for modules
 - **Relationship Tracking**: Visualize inheritance, imports, and method calls
@@ -24,7 +25,7 @@ pip install pyastix
 ## Requirements
 
 - Python 3.8+
-- Modern web browser
+- Modern web browser (for web interface)
 
 ## Usage
 
@@ -37,6 +38,16 @@ pyastix /path/to/your/project
 ```
 
 This will analyze your codebase, generate a visualization, and open it in your default web browser.
+
+### Terminal Visualization
+
+To visualize your codebase directly in the terminal:
+
+```bash
+pyastix /path/to/your/project --terminal
+```
+
+This will display a text-based visualization of your codebase's structure right in your terminal. For smaller codebases, it will show an actual graph rendering. For larger codebases, it will display a hierarchical tree view.
 
 ### Focusing on Specific Modules
 
@@ -87,6 +98,7 @@ Options:
   --browser / --no-browser  Open in browser automatically.
   -m, --module TEXT         Target a specific module to visualize. Only this module 
                             and its direct dependencies will be shown.
+  -t, --terminal            Render graph in the terminal instead of starting a web server.
   --help                    Show this message and exit.
 ```
 
@@ -97,6 +109,7 @@ Pyastix is built with a modular architecture:
 1. **Parser Module**: Analyzes Python code using AST (Abstract Syntax Tree) to extract structure and relationships
 2. **Graph Module**: Converts the parsed code structure into a visual graph representation 
 3. **Web Interface**: Provides an interactive visualization of the graph with search, filtering and code viewing
+4. **Terminal Renderer**: Renders the graph directly in the terminal using text-based graphics
 
 ## Development
 
@@ -131,6 +144,7 @@ pyastix/
 │   ├── parser.py       # Code parsing module
 │   ├── graph.py        # Graph generation module
 │   ├── web_interface.py # Web visualization module
+│   ├── terminal_renderer.py # Terminal visualization module
 │   ├── templates/      # HTML templates
 │   └── static/         # CSS, JS, and other static files
 ├── tests/              # Test suite

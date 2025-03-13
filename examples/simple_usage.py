@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from pyastix.parser import CodebaseParser
 from pyastix.graph import DependencyGraphGenerator
-from pyastix.web_interface import WebServer
+from pyastix.interfaces.web_interface import WebServer
 
 
 def main():

@@ -2,9 +2,9 @@
 const CONFIG = {
     // Layout and simulation
     defaultLinkDistance: 100,
-    defaultChargeStrength: -300,
+    defaultChargeStrength: -100,
     moduleChargeStrength: -500,
-    defaultCollideRadius: 40,
+    defaultCollideRadius: 50,
     linkStrength: {
         contains: 0.8,
         calls: 0.3,
@@ -12,7 +12,7 @@ const CONFIG = {
         inherits: 0.7,
         default: 0.5
     },
-    centerForceStrength: 0.03,
+    centerForceStrength: 0.00,
     
     // Animation and timing
     clickDelay: 300,

@@ -7,9 +7,10 @@ import sys
 import click
 from pathlib import Path
 
-from .parser import CodebaseParser
-from .graph import DependencyGraphGenerator
-from .web_interface import WebServer
+from pyastix.parser import CodebaseParser
+from pyastix.graph import DependencyGraphGenerator
+from pyastix.interfaces.web_interface import WebServer
+from pyastix.interfaces.terminal_interface import TerminalRenderer
 
 
 @click.command()
@@ -17,7 +18,8 @@ from .web_interface import WebServer
 @click.option('--port', '-p', default=8000, help='Port to run the web server on.')
 @click.option('--browser/--no-browser', default=True, help='Open in browser automatically.')
 @click.option('--module', '-m', help='Target a specific module to visualize. Only this module and its direct dependencies will be shown.')
-def main(project_path, port, browser, module):
+@click.option('--terminal', '-t', is_flag=True, help='Render graph in the terminal instead of starting a web server.')
+def main(project_path, port, browser, module, terminal):
     """
     Generate and visualize a dependency graph for a Python project.
     
@@ -46,17 +48,23 @@ def main(project_path, port, browser, module):
     else:
         graph_data = graph_generator.generate()
     
-    # Start the web server
-    click.echo(f"Starting web server on port {port}...")
-    server = WebServer(graph_data, project_path, port=port)
-    
-    # Open browser if requested
-    if browser:
-        click.echo("Opening visualization in web browser...")
-        server.open_browser()
-    
-    # Start server
-    server.start()
+    if terminal:
+        # Render the graph in the terminal
+        click.echo("Rendering graph in terminal...")
+        renderer = TerminalRenderer(graph_data, project_path)
+        renderer.render()
+    else:
+        # Start the web server
+        click.echo(f"Starting web server on port {port}...")
+        server = WebServer(graph_data, project_path, port=port)
+        
+        # Open browser if requested
+        if browser:
+            click.echo("Opening visualization in web browser...")
+            server.open_browser()
+        
+        # Start server
+        server.start()
 
 
 if __name__ == '__main__':

@@ -8,7 +8,8 @@ from typing import Dict, Any, Optional
 import threading
 from flask import Flask, render_template, jsonify, request, send_from_directory
 
-from .graph import DependencyGraph
+from pyastix.graph import DependencyGraph
+from pyastix.parser import CodebaseStructure
 
 
 class WebServer:
@@ -25,9 +26,9 @@ class WebServer:
         self.project_path = project_path
         self.port = port
         
-        # Find template and static directories relative to this file
-        package_dir = Path(__file__).parent
-        self.templates_dir = package_dir / 'templates'
+        # Find template and static directories relative to package root
+        package_dir = Path(__file__).parent.parent  # Go up one level to pyastix root
+        self.templates_dir = package_dir / 'static' / 'templates'
         self.static_dir = package_dir / 'static'
         
         # Create Flask app
@@ -69,7 +70,6 @@ class WebServer:
             if not element_id:
                 return jsonify({"error": "No element ID provided"}), 400
             
-            from .parser import CodebaseStructure
             codebase_structure = CodebaseStructure(self.project_path)
             
             # Since graph_data doesn't have direct access to CodebaseStructure methods,
@@ -116,6 +116,15 @@ class WebServer:
                     results.append(node.to_dict())
             
             return jsonify(results)
+            
+        # Add routes to serve JS and CSS files
+        @self.app.route('/js/<path:filename>')
+        def serve_js(filename):
+            return send_from_directory(self.static_dir / 'js', filename)
+            
+        @self.app.route('/css/<path:filename>')
+        def serve_css(filename):
+            return send_from_directory(self.static_dir / 'css', filename)
     
     def start(self) -> None:
         """
@@ -134,10 +143,22 @@ class WebServer:
     def _ensure_assets_exist(self) -> None:
         """
         Ensure that template and static directories exist.
-        This is a placeholder that only creates directories if they don't exist.
-        The actual template and static files should be included in the package.
         """
-        # Create directories if they don't exist
-        self.templates_dir.mkdir(exist_ok=True)
-        self.static_dir.mkdir(exist_ok=True) 
+        # Verify that the template and static directories exist
+        if not self.templates_dir.exists():
+            raise FileNotFoundError(f"Templates directory not found at {self.templates_dir}")
+        
+        if not self.static_dir.exists():
+            raise FileNotFoundError(f"Static directory not found at {self.static_dir}")
+        
+        # Check for index.html
+        if not (self.templates_dir / 'index.html').exists():
+            raise FileNotFoundError(f"index.html not found in {self.templates_dir}")
+        
+        # Check for essential static files
+        if not (self.static_dir / 'js' / 'script.js').exists():
+            raise FileNotFoundError(f"script.js not found in {self.static_dir}/js")
+            
+        if not (self.static_dir / 'css' / 'style.css').exists():
+            raise FileNotFoundError(f"style.css not found in {self.static_dir}/css") 
         
