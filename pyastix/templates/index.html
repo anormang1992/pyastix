@@ -15,9 +15,58 @@
         <div class="search-container">
             <input type="text" id="search-input" placeholder="Search for modules, classes, methods...">
             <button id="search-button">Search</button>
+            <button id="help-button" title="Help">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+            </button>
             <div id="search-results-dropdown" class="dropdown-container"></div>
         </div>
     </header>
+
+    <!-- Help Flyout -->
+    <div id="help-flyout" class="help-flyout">
+        <div class="help-content">
+            <div class="help-header">
+                <h2>Pyastix Help</h2>
+                <button id="close-help">×</button>
+            </div>
+            <div class="help-body">
+                <h3>Graph Navigation</h3>
+                <ul>
+                    <li><strong>Pan:</strong> Click and drag on empty space to move the graph</li>
+                    <li><strong>Zoom:</strong> Use mouse wheel or pinch gesture to zoom in/out</li>
+                    <li><strong>Select Node:</strong> Left-click on a node to view its details in the side panel</li>
+                    <li><strong>Move Node:</strong> Drag a node to reposition it (it will return to its natural position unless fixed)</li>
+                    <li><strong>Fix/Unfix Node:</strong> Right-click on a node to fix it in place (blue dashed border) or unfix it</li>
+                </ul>
+                
+                <h3>Selection Tools</h3>
+                <ul>
+                    <li><strong>Pointer Tool:</strong> Select and move individual nodes</li>
+                    <li><strong>Box Selection:</strong> Select multiple nodes within a rectangle</li>
+                    <li><strong>Lasso Selection:</strong> Draw a free-form shape to select nodes</li>
+                    <li><strong>Multi-Select:</strong> Hold CTRL key while using selection tools to add to existing selection</li>
+                </ul>
+                
+                <h3>Selected Nodes</h3>
+                <ul>
+                    <li><strong>Fix Selected:</strong> Fix the position of all selected nodes</li>
+                    <li><strong>Release Selected:</strong> Allow selected nodes to move freely</li>
+                    <li><strong>Clear Selection:</strong> Deselect all nodes</li>
+                    <li><strong>Edge Distance:</strong> Adjust distance between selected nodes</li>
+                </ul>
+                
+                <h3>Filters</h3>
+                <p>Use the filter toggles in the left panel to show/hide different node and edge types.</p>
+                
+                <h3>Search</h3>
+                <p>Use the search box to find and focus on specific nodes in the graph.</p>
+            </div>
+        </div>
+    </div>
 
     <main>
         <div id="left-panel">
@@ -157,8 +206,6 @@
                         </label>
                         <input type="range" id="link-distance-slider" min="20" max="500" value="100" class="slider">
                     </div>
-                    <p class="tip">Tip: Use selection tools with the Alt key to select multiple nodes. Double-click nodes to release 
-                    them. Edge distance adjustments apply only to selected nodes when a selection exists.</p>
                 </div>
             </div>
         </div>
@@ -194,6 +241,16 @@
                         <div class="stat-item">
                             <span class="stat-label">Outgoing Calls:</span>
                             <span id="outgoing-calls" class="stat-value">-</span>
+                        </div>
+                    </div>
+                    <div class="stats-row">
+                        <div class="stat-item">
+                            <span class="stat-label">Complexity:</span>
+                            <span id="cyclomatic-complexity" class="stat-value">-</span>
+                        </div>
+                        <div class="stat-item complexity-rating">
+                            <span class="stat-label">Rating:</span>
+                            <span id="complexity-rating" class="stat-value">-</span>
                         </div>
                     </div>
                 </div>

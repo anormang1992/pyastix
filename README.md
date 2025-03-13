@@ -10,6 +10,7 @@ Pyastix is a Python CLI tool that renders Python codebases as stunning, interact
 - **Easy to Use**: Simply run `pyastix <path to project>` to generate and view a dependency graph
 - **Interactive Visualization**: Zoom, pan, and explore your codebase's structure visually
 - **Code Navigation**: Click on any node to view its source code in a side panel
+- **Code Quality Metrics**: View cyclomatic complexity for functions and methods to identify complex code
 - **Relationship Tracking**: Visualize inheritance, imports, and method calls
 - **Search Functionality**: Find specific modules, classes, or methods and focus on them
 - **Customizable Filters**: Toggle visibility of different code elements
@@ -138,6 +139,37 @@ pyastix/
 └── README.md           # Project documentation
 ```
 
+## Code Quality Metrics
+
+Pyastix provides insights into code quality through cyclomatic complexity analysis. The complexity score helps identify overly complex functions or methods that might be candidates for refactoring.
+
+### Cyclomatic Complexity Calculation
+
+Complexity is calculated using the following rules:
+
+- Base complexity of 1 for each function/method
+- +1 for each decision point:
+  - if, elif statements
+  - for, while loops
+  - except clauses
+  - with statements
+  - assert statements
+  - ternary expressions (x if condition else y)
+  - conditions in list/dict/set comprehensions
+  - match/case statements (Python 3.10+)
+- +1 for each boolean operator (and, or)
+
+### Complexity Rating Scale
+
+Complexity scores are categorized according to the following scale:
+
+- **Low (1-5)**: Easy to understand and maintain
+- **Medium (6-10)**: Moderately complex, still manageable
+- **High (11-20)**: Complex code that might benefit from refactoring
+- **Very High (>20)**: Highly complex code that should be refactored
+
+When viewing a function or method in Pyastix, its complexity score and rating are displayed to help identify areas of the codebase that may need attention. 
+
 ## Examples
 
 Check the `examples` directory for sample usage scripts.
@@ -148,4 +180,4 @@ MIT
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request. 
+Contributions are welcome! Please feel free to submit a Pull Request.

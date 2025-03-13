@@ -10,6 +10,8 @@ import re
 import fnmatch
 from typing import Dict, List, Set, Tuple, Any, Optional
 
+from .complexity import calculate_complexity, get_complexity_rating, extract_function_complexities
+
 
 class IgnorePattern:
     """
@@ -141,20 +143,23 @@ class IgnorePatternList:
 
 class CodeElement:
     """
-    Base class representing a code element in the parsed structure.
+    Base class for all code elements.
     
     Args:
-        name (str): Name of the code element
+        name (str): Name of the element
         path (str): File path where the element is defined
         lineno (int): Line number where the element starts
         end_lineno (int): Line number where the element ends
     """
-    def __init__(self, name: str, path: str, lineno: int, end_lineno: int):
+    def __init__(self, name: str, path: str, lineno: int, end_lineno: Optional[int] = None):
         self.name = name
         self.path = path
         self.lineno = lineno
-        self.end_lineno = end_lineno
+        self.end_lineno = end_lineno or lineno
         self.id = f"{path}:{name}"
+        self.complexity = -1  # Will be populated during parsing
+        self.complexity_rating = "Unknown"
+        self.complexity_class = ""
         
     def __repr__(self):
         return f"{self.__class__.__name__}(name='{self.name}', path='{self.path}')"
@@ -340,13 +345,21 @@ class CodebaseParser:
         for root, dirs, files in os.walk(self.project_path):
             # Filter directories in-place to skip ignored directories
             root_path = Path(root)
-            dirs[:] = [d for d in dirs if not self.ignore_patterns.should_ignore(root_path / d)]
+            
+            # Check if this is the pyastix directory - if so, don't apply ignores to ensure we analyze our own code
+            is_pyastix_dir = 'pyastix' in root_path.parts and root_path.name == 'pyastix'
+            
+            if not is_pyastix_dir:
+                dirs[:] = [d for d in dirs if not self.ignore_patterns.should_ignore(root_path / d)]
             
             for file in files:
                 if file.endswith('.py'):
                     file_path = Path(root) / file
-                    # Skip ignored files
-                    if not self.ignore_patterns.should_ignore(file_path):
+                    
+                    # Always include complexity.py and other pyastix modules
+                    should_include = is_pyastix_dir or not self.ignore_patterns.should_ignore(file_path)
+                    
+                    if should_include:
                         self._parse_file(file_path)
         
         # Process relationships and calls after all files are parsed
@@ -375,8 +388,16 @@ class CodebaseParser:
             module_name = str(rel_path).replace('/', '.').replace('\\', '.').replace('.py', '')
             module = Module(module_name, str(file_path), 1, None)
             
+            # Complexity is not applicable to modules as a whole
+            module.complexity = -1
+            module.complexity_rating = "N/A"
+            module.complexity_class = ""
+            
+            # Extract complexity metrics for functions and methods, including those in complexity.py itself
+            function_complexities = extract_function_complexities(str(file_path))
+            
             # Parse the module content
-            self._parse_module_node(module, module_node)
+            self._parse_module_node(module, module_node, function_complexities)
             
             # Add to structure
             self.structure.add_module(module)
@@ -384,13 +405,14 @@ class CodebaseParser:
         except Exception as e:
             print(f"Error parsing {file_path}: {e}")
     
-    def _parse_module_node(self, module: Module, node: astroid.Module) -> None:
+    def _parse_module_node(self, module: Module, node: astroid.Module, function_complexities: Dict[Tuple[int, int], int]) -> None:
         """
         Parse a module AST node.
         
         Args:
             module (Module): The module object to populate
             node (astroid.Module): The AST node to parse
+            function_complexities (Dict[Tuple[int, int], int]): Dictionary mapping line ranges to complexity scores
         """
         # Get end line number
         module.end_lineno = node.tolineno
@@ -401,9 +423,9 @@ class CodebaseParser:
         # Parse classes and functions
         for child in node.get_children():
             if isinstance(child, astroid.ClassDef):
-                self._parse_class(module, child)
+                self._parse_class(module, child, function_complexities)
             elif isinstance(child, astroid.FunctionDef):
-                self._parse_function(module, child)
+                self._parse_function(module, child, function_complexities)
     
     def _parse_imports(self, module: Module, node: astroid.Module) -> None:
         """
@@ -426,13 +448,14 @@ class CodebaseParser:
                                        alias=alias, is_from=True, module=child.modname)
                     module.imports.append(import_obj)
     
-    def _parse_class(self, module: Module, node: astroid.ClassDef) -> None:
+    def _parse_class(self, module: Module, node: astroid.ClassDef, function_complexities: Dict[Tuple[int, int], int]) -> None:
         """
         Parse a class AST node.
         
         Args:
             module (Module): The module containing the class
             node (astroid.ClassDef): The class AST node
+            function_complexities (Dict[Tuple[int, int], int]): Dictionary mapping line ranges to complexity
         """
         # Get parent class names
         parent_names = [base.as_string() for base in node.bases]
@@ -441,20 +464,26 @@ class CodebaseParser:
         cls = Class(node.name, module.path, node.lineno, node.tolineno, parent_names)
         module.classes[cls.id] = cls
         
+        # Complexity is not directly applicable to classes
+        cls.complexity = -1
+        cls.complexity_rating = "N/A"
+        cls.complexity_class = ""
+        
         # Parse methods and attributes
         for child in node.get_children():
             if isinstance(child, astroid.FunctionDef):
-                self._parse_method(cls, child)
+                self._parse_method(cls, child, function_complexities)
             elif isinstance(child, astroid.AssignName):
                 cls.attributes.append(child.name)
     
-    def _parse_function(self, module: Module, node: astroid.FunctionDef) -> None:
+    def _parse_function(self, module: Module, node: astroid.FunctionDef, function_complexities: Dict[Tuple[int, int], int]) -> None:
         """
         Parse a function AST node.
         
         Args:
             module (Module): The module containing the function
             node (astroid.FunctionDef): The function AST node
+            function_complexities (Dict[Tuple[int, int], int]): Dictionary mapping line ranges to complexity
         """
         func = Function(node.name, module.path, node.lineno, node.tolineno)
         module.functions[func.id] = func
@@ -465,14 +494,18 @@ class CodebaseParser:
         
         # Find function calls
         self._find_calls(func, node)
+        
+        # Set complexity
+        self._set_complexity(func, function_complexities)
     
-    def _parse_method(self, cls: Class, node: astroid.FunctionDef) -> None:
+    def _parse_method(self, cls: Class, node: astroid.FunctionDef, function_complexities: Dict[Tuple[int, int], int]) -> None:
         """
         Parse a method AST node.
         
         Args:
             cls (Class): The class containing the method
             node (astroid.FunctionDef): The method AST node
+            function_complexities (Dict[Tuple[int, int], int]): Dictionary mapping line ranges to complexity
         """
         method = Method(node.name, cls.path, node.lineno, node.tolineno, cls.name)
         cls.methods[method.id] = method
@@ -483,6 +516,9 @@ class CodebaseParser:
         
         # Find method calls
         self._find_calls(method, node)
+        
+        # Set complexity
+        self._set_complexity(method, function_complexities)
     
     def _find_calls(self, func: Function, node: astroid.FunctionDef) -> None:
         """
@@ -501,6 +537,41 @@ class CodebaseParser:
             
             if call_name:
                 func.calls.append((call_name, child_node.lineno))
+    
+    def _set_complexity(self, element: CodeElement, function_complexities: Dict[Tuple[int, int], int]) -> None:
+        """
+        Set complexity metrics for a code element.
+        
+        Args:
+            element (CodeElement): The element to update
+            function_complexities (Dict[Tuple[int, int], int]): Dictionary mapping line ranges to complexity
+        """
+        # Find the closest matching line range
+        for (start, end), complexity in function_complexities.items():
+            if element.lineno == start and element.end_lineno == end:
+                element.complexity = complexity
+                rating, css_class = get_complexity_rating(complexity)
+                element.complexity_rating = rating
+                element.complexity_class = css_class
+                return
+            
+        # If no exact match, try to find the best match
+        best_match = None
+        best_overlap = 0
+        
+        for (start, end), complexity in function_complexities.items():
+            # Check if ranges overlap
+            if max(element.lineno, start) <= min(element.end_lineno, end):
+                overlap = min(element.end_lineno, end) - max(element.lineno, start)
+                if overlap > best_overlap:
+                    best_overlap = overlap
+                    best_match = complexity
+                    
+        if best_match is not None:
+            element.complexity = best_match
+            rating, css_class = get_complexity_rating(best_match)
+            element.complexity_rating = rating
+            element.complexity_class = css_class
     
     def _process_relationships(self) -> None:
         """

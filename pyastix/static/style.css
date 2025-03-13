@@ -47,7 +47,7 @@ header {
     font-size: 14px;
 }
 
-#search-button {
+#search-button, #help-button {
     padding: 8px 15px;
     background-color: #2ecc71;
     color: white;
@@ -55,10 +55,22 @@ header {
     border-radius: 4px;
     cursor: pointer;
     font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-#search-button:hover {
+#search-button:hover, #help-button:hover {
     background-color: #27ae60;
+}
+
+#help-button {
+    background-color: #3498db;
+    padding: 8px 10px;
+}
+
+#help-button:hover {
+    background-color: #2980b9;
 }
 
 /* Selection tools styles - now in left panel */
@@ -141,7 +153,7 @@ header {
 
 /* Selected node styles */
 .node.selected circle {
-    stroke: #4169e1;
+    stroke: #e74c3c; /* Red border for selected nodes */
     stroke-width: 3px;
 }
 
@@ -493,7 +505,7 @@ svg {
 
 /* Style for fixed nodes */
 .fixed-node circle {
-    stroke: #aaa;
+    stroke: #4169e1; /* Blue border for fixed nodes */
     stroke-width: 3px;
     stroke-dasharray: 3, 3;  /* Dashed stroke pattern */
 }
@@ -559,10 +571,10 @@ svg {
 
 @keyframes flowImportsAnimation {
     0% {
-        stroke-dashoffset: 0;
+        stroke-dashoffset: -45;  /* Reversed: Start with negative offset */
     }
     100% {
-        stroke-dashoffset: -45;  /* Multiple of the pattern length (10 + 5) * 3 */
+        stroke-dashoffset: 0;  /* Move to zero, creating flow toward target */
     }
 }
 
@@ -581,10 +593,10 @@ svg {
 
 @keyframes inheritAnimation {
     0% {
-        stroke-dashoffset: 0;
+        stroke-dashoffset: -45;  /* Reversed: Start with negative offset */
     }
     100% {
-        stroke-dashoffset: -45;  /* Multiple of the pattern length sum (1 + 10 + 1 + 3) * 3 */
+        stroke-dashoffset: 0;  /* Move to zero, creating flow toward target */
     }
 }
 
@@ -716,5 +728,111 @@ svg {
 
 .button-row button:hover {
     background-color: #0056b3;
+}
+
+/* Cyclomatic complexity styling */
+.complexity-low {
+    color: #4caf50;  /* Green for low complexity */
+}
+
+.complexity-medium {
+    color: #ff9800;  /* Orange for medium complexity */
+}
+
+.complexity-high {
+    color: #f44336;  /* Red for high complexity */
+}
+
+.complexity-very-high {
+    color: #9c27b0;  /* Purple for very high complexity */
+}
+
+/* Help flyout styles */
+.help-flyout {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    display: none;
+    justify-content: center;
+    align-items: center;
+}
+
+.help-flyout.active {
+    display: flex;
+}
+
+.help-content {
+    background-color: white;
+    border-radius: 8px;
+    width: 600px;
+    max-width: 90%;
+    max-height: 90vh;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.help-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    border-bottom: 1px solid #eee;
+}
+
+.help-header h2 {
+    margin: 0;
+    font-size: 18px;
+    color: #333;
+}
+
+#close-help {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #777;
+    padding: 0;
+    line-height: 1;
+}
+
+#close-help:hover {
+    color: #333;
+}
+
+.help-body {
+    padding: 20px;
+    overflow-y: auto;
+    max-height: calc(90vh - 60px);
+}
+
+.help-body h3 {
+    margin: 15px 0 8px;
+    font-size: 16px;
+    color: #333;
+}
+
+.help-body h3:first-child {
+    margin-top: 0;
+}
+
+.help-body ul {
+    margin: 8px 0 15px;
+    padding-left: 20px;
+}
+
+.help-body li {
+    margin-bottom: 5px;
+    line-height: 1.4;
+}
+
+.help-body p {
+    margin: 8px 0;
+    line-height: 1.4;
 }
 

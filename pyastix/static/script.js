@@ -1,3 +1,53 @@
+// Configuration and constants
+const CONFIG = {
+    // Layout and simulation
+    defaultLinkDistance: 100,
+    defaultChargeStrength: -300,
+    moduleChargeStrength: -500,
+    defaultCollideRadius: 40,
+    linkStrength: {
+        contains: 0.8,
+        calls: 0.3,
+        imports: 0.5,
+        inherits: 0.7,
+        default: 0.5
+    },
+    centerForceStrength: 0.03,
+    
+    // Animation and timing
+    clickDelay: 300,
+    zoomFitPadding: 0.95,
+    transitionDuration: 750,
+    panelTransitionDelay: 50,
+    initialZoomDelay: 300,
+    
+    // Visualization
+    nodeRadii: {
+        module: 15,
+        class: 12,
+        method: 8,
+        function: 8
+    },
+    nodeLabelOffsets: {
+        module: 20,
+        class: 15,
+        method: 12,
+        function: 12
+    },
+    
+    // Zoom settings
+    zoomExtent: [0.1, 4],
+    
+    // Selection
+    selectionModes: {
+        pointer: 'pointer',
+        box: 'box',
+        lasso: 'lasso'
+    },
+    highlightColor: '#e74c3c',
+    selectionColor: '#4169e1'
+};
+
 // State variables
 let graph = { nodes: [], edges: [] };
 let simulation;
@@ -9,12 +59,12 @@ let currentZoomTransform = null;
 let selectedNode = null;
 let layoutFixed = false; // Track whether layout is fixed or dynamic
 let clickTimer = null; // For handling click vs double-click
-let clickDelay = 300; // Milliseconds to wait before handling a click
-let linkDistance = 100; // Default link distance
+let clickDelay = CONFIG.clickDelay; // Milliseconds to wait before handling a click
+let linkDistance = CONFIG.defaultLinkDistance; // Default link distance
 
 // Selection tool variables
 let selectedNodes = new Set(); // Set of selected node IDs
-let selectionMode = 'pointer'; // Current selection mode: 'pointer', 'box', or 'lasso'
+let selectionMode = CONFIG.selectionModes.pointer; // Current selection mode: 'pointer', 'box', or 'lasso'
 let selectionStartPoint = null; // Starting point for box/lasso selection
 let selectionRect = null; // D3 selection rectangle element
 let selectionLasso = null; // D3 lasso selection element
@@ -39,6 +89,9 @@ const graphContainer = document.getElementById('graph-container');
 const sidePanel = document.getElementById('side-panel');
 const searchInput = document.getElementById('search-input');
 const searchButton = document.getElementById('search-button');
+const helpButton = document.getElementById('help-button');
+const helpFlyout = document.getElementById('help-flyout');
+const closeHelp = document.getElementById('close-help');
 const closePanel = document.getElementById('close-panel');
 const elementName = document.getElementById('element-name');
 const elementType = document.getElementById('element-type').querySelector('span');
@@ -127,6 +180,30 @@ function getOutgoingCallCount(nodeId) {
     ).length;
 }
 
+// Reset node highlighting
+function resetNodeHighlighting() {
+    if (!nodeElements) return;
+    
+    nodeElements.selectAll('circle')
+        .style('stroke', '#fff')
+        .style('stroke-width', 2);
+}
+
+// Close the side panel and reset node selection
+function closeSidePanel(previousTransform) {
+    // Close the panel
+    sidePanel.classList.add('collapsed');
+    
+    // Reset highlighting and selection
+    resetNodeHighlighting();
+    selectedNode = null;
+    
+    // Adjust the graph view with minimal disruption
+    setTimeout(() => {
+        adjustGraphForPanelChange(previousTransform, false);
+    }, CONFIG.panelTransitionDelay);
+}
+
 // Set up event listeners
 function setupEventListeners() {
     // Search
@@ -140,88 +217,67 @@ function setupEventListeners() {
         }
     });
     
+    // Help button and flyout
+    helpButton.addEventListener('click', () => {
+        helpFlyout.classList.add('active');
+    });
+    
+    closeHelp.addEventListener('click', () => {
+        helpFlyout.classList.remove('active');
+    });
+    
+    // Close help flyout when clicking outside of it
+    helpFlyout.addEventListener('click', (event) => {
+        if (event.target === helpFlyout) {
+            helpFlyout.classList.remove('active');
+        }
+    });
+    
+    // Close help flyout when pressing ESC key
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && helpFlyout.classList.contains('active')) {
+            helpFlyout.classList.remove('active');
+        }
+    });
+    
     // Close side panel
     closePanel.addEventListener('click', () => {
         // Save the current view state before closing panel
         const previousTransform = currentZoomTransform;
-        
-        // Close the panel
-        sidePanel.classList.add('collapsed');
-        
-        // Remove highlighting from all nodes
-        nodeElements.selectAll('circle')
-            .style('stroke', '#fff')
-            .style('stroke-width', 2);
-        
-        // Reset the selected node
-        selectedNode = null;
-        
-        // Adjust the graph view with minimal disruption
-        setTimeout(() => {
-            adjustGraphForPanelChange(previousTransform, false);
-        }, 50);
+        closeSidePanel(previousTransform);
     });
+    
+    // Set up toggle handlers
+    function setupToggle(element, targetObj, property, callback = updateVisibility) {
+        element.addEventListener('change', () => {
+            targetObj[property] = element.checked;
+            callback();
+        });
+    }
     
     // Node type filters
-    toggleModules.addEventListener('change', () => {
-        visibleTypes.module = toggleModules.checked;
-        updateVisibility();
-    });
-    
-    toggleClasses.addEventListener('change', () => {
-        visibleTypes.class = toggleClasses.checked;
-        updateVisibility();
-    });
-    
-    toggleMethods.addEventListener('change', () => {
-        visibleTypes.method = toggleMethods.checked;
-        updateVisibility();
-    });
-    
-    toggleFunctions.addEventListener('change', () => {
-        visibleTypes.function = toggleFunctions.checked;
-        updateVisibility();
-    });
+    setupToggle(toggleModules, visibleTypes, 'module');
+    setupToggle(toggleClasses, visibleTypes, 'class');
+    setupToggle(toggleMethods, visibleTypes, 'method');
+    setupToggle(toggleFunctions, visibleTypes, 'function');
     
     // Edge type filters
-    toggleContains.addEventListener('change', () => {
-        visibleEdgeTypes.contains = toggleContains.checked;
-        updateVisibility();
-    });
-    
-    toggleCalls.addEventListener('change', () => {
-        visibleEdgeTypes.calls = toggleCalls.checked;
-        updateVisibility();
-    });
-    
-    toggleImports.addEventListener('change', () => {
-        visibleEdgeTypes.imports = toggleImports.checked;
-        updateVisibility();
-    });
-    
-    toggleInherits.addEventListener('change', () => {
-        visibleEdgeTypes.inherits = toggleInherits.checked;
-        updateVisibility();
-    });
+    setupToggle(toggleContains, visibleEdgeTypes, 'contains');
+    setupToggle(toggleCalls, visibleEdgeTypes, 'calls');
+    setupToggle(toggleImports, visibleEdgeTypes, 'imports');
+    setupToggle(toggleInherits, visibleEdgeTypes, 'inherits');
 
     // Animation toggles
-    toggleCallAnimations.addEventListener('change', () => {
-        // Apply or remove the animated class to call edges
-        linkElements.filter(d => d.type === 'calls')
-            .classed('animated', toggleCallAnimations.checked);
-    });
+    function setupAnimationToggle(element, edgeType) {
+        element.addEventListener('change', () => {
+            linkElements.filter(d => d.type === edgeType)
+                .classed('animated', element.checked);
+        });
+    }
     
-    toggleImportAnimations.addEventListener('change', () => {
-        // Apply or remove the animated class to import edges
-        linkElements.filter(d => d.type === 'imports')
-            .classed('animated', toggleImportAnimations.checked);
-    });
-    
-    toggleInheritAnimations.addEventListener('change', () => {
-        // Apply or remove the animated class to inheritance edges
-        linkElements.filter(d => d.type === 'inherits')
-            .classed('animated', toggleInheritAnimations.checked);
-    });
+    setupAnimationToggle(toggleCallAnimations, 'calls');
+    setupAnimationToggle(toggleImportAnimations, 'imports');
+    setupAnimationToggle(toggleInheritAnimations, 'inherits');
 
     // Layout controls
     document.getElementById('toggle-fixed-layout').addEventListener('change', function() {
@@ -229,13 +285,7 @@ function setupEventListeners() {
         
         if (layoutFixed) {
             // Fix all nodes in their current positions
-            graph.nodes.forEach(node => {
-                node.fx = node.x;
-                node.fy = node.y;
-            });
-        } else {
-            // Only release nodes if the release button wasn't pressed
-            // This allows the toggle to act as a way to "lock" current positions
+            fixAllNodes();
         }
         
         // Update node styling
@@ -246,13 +296,7 @@ function setupEventListeners() {
     
     document.getElementById('release-all-nodes').addEventListener('click', function() {
         // Release all nodes
-        graph.nodes.forEach(node => {
-            node.fx = null;
-            node.fy = null;
-        });
-        
-        // Update node styling
-        updateFixedNodeStyling();
+        releaseAllNodes();
         
         // Uncheck the fixed layout toggle
         document.getElementById('toggle-fixed-layout').checked = false;
@@ -276,38 +320,14 @@ function setupEventListeners() {
             linkDistanceValue.textContent = newDistance;
             
             // Update link distance in the simulation
-            if (simulation && simulation.force('link')) {
-                linkDistance = newDistance;
-                
-                // Apply distance conditionally based on selection
-                if (selectedNodes.size > 0) {
-                    // Apply only to edges connecting selected nodes
-                    simulation.force('link').distance(d => {
-                        const sourceIsSelected = selectedNodes.has(d.source.id || d.source);
-                        const targetIsSelected = selectedNodes.has(d.target.id || d.target);
-                        
-                        // If both nodes are selected, apply the new distance
-                        if (sourceIsSelected && targetIsSelected) {
-                            return newDistance;
-                        }
-                        
-                        // Otherwise, maintain existing distances
-                        return d.distance || linkDistance;
-                    });
-                } else {
-                    // Apply to all edges
-                    simulation.force('link').distance(newDistance);
-                }
-                
-                simulation.alpha(0.3).restart(); // Restart with some activity
-            }
+            updateLinkDistance(newDistance);
         });
     }
 
     // Selection tool event listeners
-    pointerTool.addEventListener('click', () => setSelectionMode('pointer'));
-    boxSelectTool.addEventListener('click', () => setSelectionMode('box'));
-    lassoSelectTool.addEventListener('click', () => setSelectionMode('lasso'));
+    pointerTool.addEventListener('click', () => setSelectionMode(CONFIG.selectionModes.pointer));
+    boxSelectTool.addEventListener('click', () => setSelectionMode(CONFIG.selectionModes.box));
+    lassoSelectTool.addEventListener('click', () => setSelectionMode(CONFIG.selectionModes.lasso));
     
     // Selection action buttons
     fixSelectedButton.addEventListener('click', fixSelectedNodes);
@@ -331,6 +351,27 @@ function setupEventListeners() {
     });
 }
 
+// Tick function to update positions during simulation
+function updatePositions() {
+    if (!linkElements || !nodeElements) return;
+    
+    linkElements
+        .attr('x1', d => d.source.x)
+        .attr('y1', d => d.source.y)
+        .attr('x2', d => {
+            // For inheritance edges, make them more vertical
+            if (d.type === 'inherits' && toggleInheritAnimations && toggleInheritAnimations.checked) {
+                // Move target position 80% toward the target's x
+                return d.source.x + (d.target.x - d.source.x) * 0.99;
+            }
+            return d.target.x;
+        })
+        .attr('y2', d => d.target.y);
+    
+    nodeElements
+        .attr('transform', d => `translate(${d.x}, ${d.y})`);
+}
+
 // Initialize the graph visualization
 function initializeGraph() {
     // Clear previous graph
@@ -347,7 +388,7 @@ function initializeGraph() {
     
     // Initialize zoom behavior
     zoom = d3.zoom()
-        .scaleExtent([0.1, 4])
+        .scaleExtent(CONFIG.zoomExtent)
         .on('zoom', event => {
             g.attr('transform', event.transform);
             currentZoomTransform = event.transform; // Save current transform
@@ -364,13 +405,25 @@ function initializeGraph() {
             // Store the initial distance for each link
             d.distance = linkDistance;
             return linkDistance;
-        }).strength(0.5))
-        .force('charge', d3.forceManyBody().strength(-100))
+        }).strength(d => {
+            // Apply different strengths based on link type
+            return CONFIG.linkStrength[d.type] || CONFIG.linkStrength.default;
+        }))
+        .force('charge', d3.forceManyBody().strength(d => {
+            // Apply stronger repulsion for modules
+            return d.type === 'module' ? CONFIG.moduleChargeStrength : CONFIG.defaultChargeStrength;
+        }))
         .force('center', d3.forceCenter(
             graphContainer.clientWidth / 2,
             graphContainer.clientHeight / 2
-        ).strength(0.05))
-        .force('collide', d3.forceCollide(30));
+        ).strength(CONFIG.centerForceStrength))
+        .force('collide', d3.forceCollide(d => {
+            // Use larger collision radius for modules
+            return d.type === 'module' ? CONFIG.defaultCollideRadius * 1.5 : CONFIG.defaultCollideRadius;
+        }));
+    
+    // Apply initial positions to improve layout
+    setInitialNodePositions();
     
     // Create links
     linkElements = g.append('g')
@@ -410,110 +463,105 @@ function initializeGraph() {
     
     // Add circles to nodes
     nodeGroups.append('circle')
-        .attr('r', d => {
-            if (d.type === 'module') return 15;
-            if (d.type === 'class') return 12;
-            return 8;
-        });
+        .attr('r', d => CONFIG.nodeRadii[d.type]);
     
     // Add labels to nodes
     nodeGroups.append('text')
-        .attr('dx', d => {
-            if (d.type === 'module') return 20;
-            if (d.type === 'class') return 15;
-            return 12;
-        })
+        .attr('dx', d => CONFIG.nodeLabelOffsets[d.type])
         .attr('dy', '.35em')
         .text(d => d.label);
     
     // Handle both click and double-click events
     nodeGroups.on('click', function(event, d) {
-        // Detect if it's a double-click
-        if (event.detail === 2) {
-            // This is a double-click - behavior depends on mode
-            if (selectionMode === 'pointer') {
-                // In pointer mode, double-click releases the node
-                d.fx = null;
-                d.fy = null;
-                // Update styling
-                d3.select(this).classed('fixed-node', false);
-                // Restart the simulation with some activity
-                simulation.alpha(0.3).restart();
-            } else {
-                // In selection modes, double-click toggles fixed state of selected nodes
-                if (selectedNodes.has(d.id)) {
-                    // If this node is selected, toggle fixed state of all selected nodes
-                    const shouldFix = d.fx === null; // If this node is unfixed, fix all selected nodes
-                    
-                    graph.nodes.forEach(node => {
-                        if (selectedNodes.has(node.id)) {
-                            if (shouldFix) {
-                                // Fix the node
-                                node.fx = node.x;
-                                node.fy = node.y;
-                            } else {
-                                // Release the node
-                                node.fx = null;
-                                node.fy = null;
-                            }
-                        }
-                    });
-                    
+        // Left-click behavior
+        if (event.button === 0) {
+            // Detect if it's a double-click
+            if (event.detail === 2) {
+                // This is a double-click - behavior depends on mode
+                if (selectionMode === CONFIG.selectionModes.pointer) {
+                    // In pointer mode, double-click releases the node
+                    d.fx = null;
+                    d.fy = null;
                     // Update styling
-                    updateFixedNodeStyling();
-                    // Restart the simulation
+                    d3.select(this).classed('fixed-node', false);
+                    // Restart the simulation with some activity
                     simulation.alpha(0.3).restart();
+                } else {
+                    // In selection modes, double-click toggles fixed state of selected nodes
+                    if (selectedNodes.has(d.id)) {
+                        // If this node is selected, toggle fixed state of all selected nodes
+                        const shouldFix = d.fx === null; // If this node is unfixed, fix all selected nodes
+                        
+                        graph.nodes.forEach(node => {
+                            if (selectedNodes.has(node.id)) {
+                                if (shouldFix) {
+                                    // Fix the node
+                                    node.fx = node.x;
+                                    node.fy = node.y;
+                                } else {
+                                    // Release the node
+                                    node.fx = null;
+                                    node.fy = null;
+                                }
+                            }
+                        });
+                        
+                        // Update styling
+                        updateFixedNodeStyling();
+                        // Restart the simulation
+                        simulation.alpha(0.3).restart();
+                    }
                 }
+                
+                // Clear any existing click timer
+                if (clickTimer) {
+                    clearTimeout(clickTimer);
+                    clickTimer = null;
+                }
+            } else {
+                // This is a single click - handle with delay to allow for double-click
+                if (clickTimer) {
+                    clearTimeout(clickTimer);
+                }
+                clickTimer = setTimeout(() => {
+                    // This executes if there wasn't a double-click within the delay period
+                    nodeClicked(event, d);
+                    clickTimer = null;
+                }, CONFIG.clickDelay);
             }
-            
-            // Clear any existing click timer
-            if (clickTimer) {
-                clearTimeout(clickTimer);
-                clickTimer = null;
-            }
-        } else {
-            // This is a single click - handle with delay to allow for double-click
-            if (clickTimer) {
-                clearTimeout(clickTimer);
-            }
-            clickTimer = setTimeout(() => {
-                // This executes if there wasn't a double-click within the delay period
-                nodeClicked(event, d);
-                clickTimer = null;
-            }, clickDelay);
         }
+    }).on('contextmenu', function(event, d) {
+        // Right-click behavior - fix/unfix the node
+        event.preventDefault(); // Prevent the default context menu
+        
+        if (d.fx === null) {
+            // Node is not fixed, so fix it
+            d.fx = d.x;
+            d.fy = d.y;
+        } else {
+            // Node is fixed, so unfix it
+            d.fx = null;
+            d.fy = null;
+        }
+        
+        // Update styling
+        updateFixedNodeStyling();
+        
+        // Restart the simulation with higher alpha for more movement
+        simulation.alpha(0.5).restart();
     });
     
     // Start the simulation
-    simulation.nodes(graph.nodes).on('tick', ticked);
+    simulation.nodes(graph.nodes).on('tick', updatePositions);
     simulation.force('link').links(graph.edges);
     
     // Initialize fixed node styling
     updateFixedNodeStyling();
     
-    // Tick function to update positions
-    function ticked() {
-        linkElements
-            .attr('x1', d => d.source.x)
-            .attr('y1', d => d.source.y)
-            .attr('x2', d => {
-                // For inheritance edges, make them more vertical
-                if (d.type === 'inherits' && toggleInheritAnimations && toggleInheritAnimations.checked) {
-                    // Move target position 80% toward the target's x
-                    return d.source.x + (d.target.x - d.source.x) * 0.99;
-                }
-                return d.target.x;
-            })
-            .attr('y2', d => d.target.y);
-        
-        nodeGroups
-            .attr('transform', d => `translate(${d.x}, ${d.y})`);
-    }
-    
     // Apply initial zoom to fit all nodes
     setTimeout(() => {
         zoomToFit();
-    }, 300);
+    }, CONFIG.initialZoomDelay);
 }
 
 // Update the stats display for a node
@@ -524,6 +572,9 @@ function updateNodeStats(node) {
         lineCount.textContent = '-';
         incomingCalls.textContent = '-';
         outgoingCalls.textContent = '-';
+        document.getElementById('cyclomatic-complexity').textContent = '-';
+        document.getElementById('complexity-rating').textContent = '-';
+        document.getElementById('complexity-rating').className = 'stat-value';
         return;
     }
     
@@ -547,6 +598,34 @@ function updateNodeStats(node) {
     // Calculate outgoing calls (where this node is the source)
     const outgoing = getOutgoingCallCount(node.id);
     outgoingCalls.textContent = outgoing;
+    
+    // Update complexity metrics - only for functions and methods
+    const complexityEl = document.getElementById('cyclomatic-complexity');
+    const ratingEl = document.getElementById('complexity-rating');
+    const complexityRow = document.querySelector('.element-stats .stats-row:last-child');
+    
+    if (node.type === 'function' || node.type === 'method') {
+        // Show complexity section for functions and methods
+        complexityRow.style.display = 'flex';
+        
+        if (node.data.complexity && node.data.complexity >= 0) {
+            complexityEl.textContent = node.data.complexity;
+            ratingEl.textContent = node.data.complexity_rating || '-';
+            
+            // Reset classes and add the appropriate complexity class
+            ratingEl.className = 'stat-value';
+            if (node.data.complexity_class) {
+                ratingEl.classList.add(node.data.complexity_class);
+            }
+        } else {
+            complexityEl.textContent = '-';
+            ratingEl.textContent = '-';
+            ratingEl.className = 'stat-value';
+        }
+    } else {
+        // Hide complexity section for modules and classes
+        complexityRow.style.display = 'none';
+    }
 }
 
 // Adjust the graph view for a panel change with minimal disruption
@@ -585,7 +664,7 @@ function adjustGraphForResize() {
 }
 
 // Zoom to fit all visible nodes
-function zoomToFit(paddingPercent = 0.95) {
+function zoomToFit(paddingPercent = CONFIG.zoomFitPadding) {
     const bounds = getVisibleNodesBounds();
     if (!bounds) return;
     
@@ -617,7 +696,7 @@ function zoomToFit(paddingPercent = 0.95) {
         .scale(scale);
     
     svg.transition()
-        .duration(750)
+        .duration(CONFIG.transitionDuration)
         .call(zoom.transform, transform);
 }
 
@@ -650,11 +729,13 @@ function getVisibleNodesBounds() {
 // Handle node drag events
 function dragStarted(event, d) {
     if (!event.active) simulation.alphaTarget(0.3).restart();
+    
+    // Store the original fixed state
+    d._wasFixed = d.fx !== null;
+    
+    // Temporarily fix the node during drag for smooth movement
     d.fx = d.x;
     d.fy = d.y;
-    
-    // Mark the node as fixed immediately
-    d3.select(event.sourceEvent.target.parentNode).classed('fixed-node', true);
 }
 
 function dragging(event, d) {
@@ -664,13 +745,16 @@ function dragging(event, d) {
 
 function dragEnded(event, d) {
     if (!event.active) simulation.alphaTarget(0);
-    // Keep node fixed at final drag position if layoutFixed is true,
-    // otherwise always keep node positions fixed after individual dragging
-    if (!layoutFixed) {
-        // User has manually dragged this node, so keep it fixed
-        // (User can double-click to release it if needed)
+    
+    // If the node wasn't fixed before dragging, release it
+    if (!d._wasFixed && !layoutFixed) {
+    d.fx = null;
+    d.fy = null;
+        // Restart with higher alpha for more natural movement when released
+        simulation.alpha(0.5).restart();
     } else {
-        // In fixed layout mode, nodes are already fixed
+        // Fixed nodes get smaller alpha adjustment
+        simulation.alpha(0.1).restart();
     }
     
     // Update fixed node styling
@@ -687,28 +771,32 @@ function updateFixedNodeStyling() {
     });
 }
 
+// Toggle a node's selection status
+function toggleNodeSelection(nodeId, isShiftKey = false) {
+    if (selectedNodes.has(nodeId)) {
+        // If already selected, remove it
+        selectedNodes.delete(nodeId);
+    } else {
+        // If not selected, add it
+        // But clear previous selection first if shift isn't pressed
+        if (!isShiftKey) {
+            selectedNodes.clear();
+        }
+        selectedNodes.add(nodeId);
+    }
+    
+    // Update node styling and UI
+    updateNodeSelection();
+    updateSelectionUI();
+}
+
 // Handle node click event
 function nodeClicked(event, node) {
     // Check if we're in multi-select mode (box or lasso)
-    if (selectionMode !== 'pointer') {
+    if (selectionMode !== CONFIG.selectionModes.pointer) {
         // In selection modes, the click should add/remove from selection
         const isShiftKey = event.sourceEvent && event.sourceEvent.shiftKey;
-        
-        if (selectedNodes.has(node.id)) {
-            // If already selected, remove it
-            selectedNodes.delete(node.id);
-        } else {
-            // If not selected, add it
-            // But clear previous selection first if shift isn't pressed
-            if (!isShiftKey) {
-                selectedNodes.clear();
-            }
-            selectedNodes.add(node.id);
-        }
-        
-        // Update node styling and UI
-        updateNodeSelection();
-        updateSelectionUI();
+        toggleNodeSelection(node.id, isShiftKey);
         return;
     }
     
@@ -724,20 +812,7 @@ function nodeClicked(event, node) {
     
     if (isSameNode && !panelWasCollapsed) {
         // If same node and panel is open, close it
-        sidePanel.classList.add('collapsed');
-        
-        // Remove highlighting from all nodes
-        nodeElements.selectAll('circle')
-            .style('stroke', '#fff')
-            .style('stroke-width', 2);
-        
-        selectedNode = null;
-        
-        // Adjust view when panel closes
-        setTimeout(() => {
-            adjustGraphForPanelChange(previousTransform, false);
-        }, 50);
-        
+        closeSidePanel(previousTransform);
         return;
     }
     
@@ -746,7 +821,7 @@ function nodeClicked(event, node) {
     
     // Highlight clicked node
     nodeElements.selectAll('circle')
-        .style('stroke', d => d.id === node.id ? '#ff5722' : '#fff')
+        .style('stroke', d => d.id === node.id ? CONFIG.highlightColor : '#fff')
         .style('stroke-width', d => d.id === node.id ? 3 : 2);
     
     // Show side panel
@@ -756,7 +831,7 @@ function nodeClicked(event, node) {
     if (panelWasCollapsed) {
         setTimeout(() => {
             adjustGraphForPanelChange(previousTransform, true);
-        }, 50);
+        }, CONFIG.panelTransitionDelay);
     }
     
     // Update side panel content
@@ -797,7 +872,7 @@ function searchElements() {
             if (results.length > 0) {
                 if (results.length === 1) {
                     // Only one result, focus on it directly
-                    focusOnNode(results[0].id);
+                focusOnNode(results[0].id);
                     searchDropdown.classList.remove('active');
                 } else {
                     // Multiple results, show the dropdown
@@ -908,7 +983,7 @@ function focusOnNode(nodeId) {
             .scale(scale);
         
         svg.transition()
-            .duration(750)
+            .duration(CONFIG.transitionDuration)
             .call(zoom.transform, transform)
             .on('end', () => {
                 // When zoom transition completes, simulate a click on the node
@@ -1019,13 +1094,13 @@ function setSelectionMode(mode) {
     }
     
     // Update active class on buttons
-    pointerTool.classList.toggle('active', mode === 'pointer');
-    boxSelectTool.classList.toggle('active', mode === 'box');
-    lassoSelectTool.classList.toggle('active', mode === 'lasso');
+    pointerTool.classList.toggle('active', mode === CONFIG.selectionModes.pointer);
+    boxSelectTool.classList.toggle('active', mode === CONFIG.selectionModes.box);
+    lassoSelectTool.classList.toggle('active', mode === CONFIG.selectionModes.lasso);
     
     // Update cursor style
     if (svg) {
-        svg.style('cursor', mode === 'pointer' ? 'default' : 'crosshair');
+        svg.style('cursor', mode === CONFIG.selectionModes.pointer ? 'default' : 'crosshair');
     }
     
     // Setup the appropriate selection behavior
@@ -1036,7 +1111,7 @@ function setSelectionMode(mode) {
            .on('mouseup.selection', null);
         
         // Add new event listeners based on mode
-        if (mode === 'box' || mode === 'lasso') {
+        if (mode === CONFIG.selectionModes.box || mode === CONFIG.selectionModes.lasso) {
             svg.on('mousedown.selection', startSelection)
                .on('mousemove.selection', updateSelection)
                .on('mouseup.selection', endSelection);
@@ -1047,7 +1122,7 @@ function setSelectionMode(mode) {
 // Start a selection operation
 function startSelection(event) {
     // Skip if not in selection mode or if using pointer tool
-    if (!['box', 'lasso'].includes(selectionMode)) return;
+    if (![CONFIG.selectionModes.box, CONFIG.selectionModes.lasso].includes(selectionMode)) return;
     
     // Prevent default behavior and stop propagation
     event.preventDefault();
@@ -1058,7 +1133,7 @@ function startSelection(event) {
     isSelecting = true;
     
     // Create selection elements
-    if (selectionMode === 'box') {
+    if (selectionMode === CONFIG.selectionModes.box) {
         // Create a selection rectangle
         selectionRect = svg.append('rect')
             .attr('class', 'selection-overlay')
@@ -1066,7 +1141,7 @@ function startSelection(event) {
             .attr('y', y)
             .attr('width', 0)
             .attr('height', 0);
-    } else if (selectionMode === 'lasso') {
+    } else if (selectionMode === CONFIG.selectionModes.lasso) {
         // Initialize lasso points
         lassoPoints = [{ x, y }];
         
@@ -1083,7 +1158,7 @@ function updateSelection(event) {
     
     const [currentX, currentY] = d3.pointer(event);
     
-    if (selectionMode === 'box' && selectionRect) {
+    if (selectionMode === CONFIG.selectionModes.box && selectionRect) {
         // Calculate rectangle parameters
         const x = Math.min(selectionStartPoint.x, currentX);
         const y = Math.min(selectionStartPoint.y, currentY);
@@ -1096,7 +1171,7 @@ function updateSelection(event) {
             .attr('y', y)
             .attr('width', width)
             .attr('height', height);
-    } else if (selectionMode === 'lasso' && selectionLasso) {
+    } else if (selectionMode === CONFIG.selectionModes.lasso && selectionLasso) {
         // Add point to lasso
         lassoPoints.push({ x: currentX, y: currentY });
         
@@ -1115,7 +1190,7 @@ function endSelection(event) {
     isSelecting = false;
     
     // Process the selection based on the mode
-    if (selectionMode === 'box' && selectionRect) {
+    if (selectionMode === CONFIG.selectionModes.box && selectionRect) {
         // Get rectangle boundaries
         const rect = selectionRect.node().getBoundingClientRect();
         const svgRect = svg.node().getBoundingClientRect();
@@ -1138,7 +1213,7 @@ function endSelection(event) {
                    node.y >= invertedY1 && node.y <= invertedY2;
         });
         
-    } else if (selectionMode === 'lasso' && selectionLasso) {
+    } else if (selectionMode === CONFIG.selectionModes.lasso && selectionLasso) {
         // Convert lasso points to account for zoom/transform
         const transformedLassoPoints = lassoPoints.map(pt => ({
             x: (pt.x - currentZoomTransform.x) / currentZoomTransform.k,
@@ -1266,6 +1341,174 @@ function releaseSelectedNodes() {
     // Update fixed node styling
     updateFixedNodeStyling();
     
-    // Restart the simulation
-    simulation.alpha(0.3).restart();
+    // Restart the simulation with higher alpha
+    simulation.alpha(0.5).restart();
+}
+
+// Fix positions of all nodes
+function fixAllNodes() {
+    graph.nodes.forEach(node => {
+        node.fx = node.x;
+        node.fy = node.y;
+    });
+    
+    // Restart the simulation with higher alpha
+    simulation.alpha(0.8).restart();
+}
+
+// Release all nodes
+function releaseAllNodes() {
+    graph.nodes.forEach(node => {
+        node.fx = null;
+        node.fy = null;
+    });
+    
+    // Update node styling
+    updateFixedNodeStyling();
+    
+    // Restart the simulation with higher alpha
+    simulation.alpha(0.8).restart();
+}
+
+// Update link distance in the simulation
+function updateLinkDistance(newDistance) {
+    if (!simulation || !simulation.force('link')) return;
+    
+    linkDistance = newDistance;
+    
+    // Apply distance conditionally based on selection
+    if (selectedNodes.size > 0) {
+        // Apply only to edges connecting selected nodes
+        simulation.force('link')
+            .distance(d => {
+                const sourceIsSelected = selectedNodes.has(d.source.id || d.source);
+                const targetIsSelected = selectedNodes.has(d.target.id || d.target);
+                
+                // If both nodes are selected, apply the new distance
+                if (sourceIsSelected && targetIsSelected) {
+                    return newDistance;
+                }
+                
+                // Otherwise, maintain existing distances
+                return d.distance || linkDistance;
+            })
+            .strength(d => {
+                // Maintain the strength settings when updating distance
+                return CONFIG.linkStrength[d.type] || CONFIG.linkStrength.default;
+            });
+    } else {
+        // Apply to all edges while maintaining strength settings
+        simulation.force('link')
+            .distance(newDistance)
+            .strength(d => {
+                return CONFIG.linkStrength[d.type] || CONFIG.linkStrength.default;
+            });
+    }
+    
+    // Use higher alpha to allow more movement for the adjustment to take effect
+    simulation.alpha(0.5).restart();
+}
+
+// Apply initial positions to improve layout
+function setInitialNodePositions() {
+    if (!graph || !graph.nodes || graph.nodes.length === 0) return;
+    
+    // Group nodes by module
+    const moduleGroups = {};
+    const moduleNodes = [];
+    
+    // Find all modules
+    graph.nodes.forEach(node => {
+        if (node.type === 'module') {
+            moduleNodes.push(node);
+            moduleGroups[node.id] = [node];
+        }
+    });
+    
+    // Group nodes with their containing modules
+    graph.edges.forEach(edge => {
+        if (edge.type === 'contains') {
+            const sourceId = edge.source.id || edge.source;
+            const targetId = edge.target.id || edge.target;
+            
+            // Find the module node and the contained node
+            const moduleNode = graph.nodes.find(n => n.id === sourceId && n.type === 'module');
+            const containedNode = graph.nodes.find(n => n.id === targetId);
+            
+            if (moduleNode && containedNode && moduleGroups[moduleNode.id]) {
+                moduleGroups[moduleNode.id].push(containedNode);
+            }
+        }
+    });
+    
+    // Calculate module positions - arrange in a grid or circle based on number
+    const containerWidth = graphContainer.clientWidth;
+    const containerHeight = graphContainer.clientHeight;
+    const centerX = containerWidth / 2;
+    const centerY = containerHeight / 2;
+    
+    if (moduleNodes.length <= 8) {
+        // For fewer modules, arrange in a circle for better visibility
+        const radius = Math.min(containerWidth, containerHeight) * 0.3;
+        
+        moduleNodes.forEach((moduleNode, index) => {
+            const angle = (index / moduleNodes.length) * 2 * Math.PI;
+            moduleNode.x = centerX + radius * Math.cos(angle);
+            moduleNode.y = centerY + radius * Math.sin(angle);
+            
+            // Apply a slight offset to nodes in this module's group
+            if (moduleGroups[moduleNode.id]) {
+                const groupNodes = moduleGroups[moduleNode.id];
+                const groupRadius = 50 + groupNodes.length * 5; // Radius grows with group size
+                
+                groupNodes.forEach((node, nodeIndex) => {
+                    if (node !== moduleNode) { // Skip the module itself
+                        // Position in smaller circle around module
+                        const nodeAngle = (nodeIndex / groupNodes.length) * 2 * Math.PI;
+                        node.x = moduleNode.x + groupRadius * 0.5 * Math.cos(nodeAngle);
+                        node.y = moduleNode.y + groupRadius * 0.5 * Math.sin(nodeAngle);
+                    }
+                });
+            }
+        });
+    } else {
+        // For many modules, arrange in a grid
+        const cols = Math.ceil(Math.sqrt(moduleNodes.length));
+        const rows = Math.ceil(moduleNodes.length / cols);
+        const cellWidth = containerWidth * 0.7 / cols;
+        const cellHeight = containerHeight * 0.7 / rows;
+        const startX = centerX - (cellWidth * (cols - 1)) / 2;
+        const startY = centerY - (cellHeight * (rows - 1)) / 2;
+        
+        moduleNodes.forEach((moduleNode, index) => {
+            const col = index % cols;
+            const row = Math.floor(index / cols);
+            
+            moduleNode.x = startX + col * cellWidth;
+            moduleNode.y = startY + row * cellHeight;
+            
+            // Apply a slight offset to nodes in this module's group
+            if (moduleGroups[moduleNode.id]) {
+                const groupNodes = moduleGroups[moduleNode.id];
+                const groupRadius = 40; // Fixed radius for grid layout
+                
+                groupNodes.forEach((node, nodeIndex) => {
+                    if (node !== moduleNode) { // Skip the module itself
+                        // Position in smaller circle around module
+                        const nodeAngle = (nodeIndex / groupNodes.length) * 2 * Math.PI;
+                        node.x = moduleNode.x + groupRadius * Math.cos(nodeAngle);
+                        node.y = moduleNode.y + groupRadius * Math.sin(nodeAngle);
+                    }
+                });
+            }
+        });
+    }
+    
+    // Initialize nodes that don't belong to any module
+    graph.nodes.forEach(node => {
+        if (!node.x || !node.y) {
+            node.x = centerX + (Math.random() - 0.5) * containerWidth * 0.5;
+            node.y = centerY + (Math.random() - 0.5) * containerHeight * 0.5;
+        }
+    });
 }

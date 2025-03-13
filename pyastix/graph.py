@@ -261,7 +261,10 @@ class DependencyGraphGenerator:
                 {
                     "path": module.path,
                     "lineno": module.lineno,
-                    "end_lineno": module.end_lineno
+                    "end_lineno": module.end_lineno,
+                    "complexity": module.complexity,
+                    "complexity_rating": module.complexity_rating,
+                    "complexity_class": module.complexity_class
                 }
             )
             
@@ -276,7 +279,10 @@ class DependencyGraphGenerator:
                         "lineno": cls.lineno,
                         "end_lineno": cls.end_lineno,
                         "parent_names": cls.parent_names,
-                        "attributes": cls.attributes
+                        "attributes": cls.attributes,
+                        "complexity": cls.complexity,
+                        "complexity_rating": cls.complexity_rating,
+                        "complexity_class": cls.complexity_class
                     }
                 )
                 
@@ -291,7 +297,10 @@ class DependencyGraphGenerator:
                             "lineno": method.lineno,
                             "end_lineno": method.end_lineno,
                             "class_name": method.class_name,
-                            "parameters": method.parameters
+                            "parameters": method.parameters,
+                            "complexity": method.complexity,
+                            "complexity_rating": method.complexity_rating,
+                            "complexity_class": method.complexity_class
                         }
                     )
             
@@ -305,7 +314,10 @@ class DependencyGraphGenerator:
                         "path": func.path,
                         "lineno": func.lineno,
                         "end_lineno": func.end_lineno,
-                        "parameters": func.parameters
+                        "parameters": func.parameters,
+                        "complexity": func.complexity,
+                        "complexity_rating": func.complexity_rating,
+                        "complexity_class": func.complexity_class
                     }
                 )
     
@@ -501,5 +513,102 @@ class DependencyGraphGenerator:
             return
         
         self.edge_ids.add(id)
-        self.edges.append(GraphEdge(id, source, target, type, data)) 
+        self.edges.append(GraphEdge(id, source, target, type, data))
+
+    @staticmethod
+    def create_graph(codebase: CodebaseStructure) -> 'DependencyGraph':
+        """
+        Create a dependency graph from a parsed codebase structure.
+        
+        Args:
+            codebase (CodebaseStructure): The parsed codebase structure
+            
+        Returns:
+            DependencyGraph: The resulting dependency graph
+        """
+        nodes = []
+        edges = []
+        
+        # Create nodes for modules
+        for module_id, module in codebase.modules.items():
+            module_data = {
+                "path": module.path,
+                "lineno": module.lineno,
+                "end_lineno": module.end_lineno,
+                "complexity": module.complexity,
+                "complexity_rating": module.complexity_rating,
+                "complexity_class": module.complexity_class
+            }
+            
+            module_node = GraphNode(module_id, module.name, "module", module_data)
+            nodes.append(module_node)
+            
+            # Create nodes for classes
+            for class_id, cls in module.classes.items():
+                class_data = {
+                    "path": cls.path,
+                    "lineno": cls.lineno,
+                    "end_lineno": cls.end_lineno,
+                    "parent_classes": cls.parent_classes,
+                    "complexity": cls.complexity,
+                    "complexity_rating": cls.complexity_rating,
+                    "complexity_class": cls.complexity_class
+                }
+                
+                class_node = GraphNode(class_id, cls.name, "class", class_data)
+                nodes.append(class_node)
+                
+                # Contains edge from module to class
+                contains_edge_id = f"{module_id}:contains:{class_id}"
+                contains_edge = GraphEdge(contains_edge_id, module_id, class_id, "contains", {})
+                edges.append(contains_edge)
+                
+                # Create nodes for methods
+                for method_id, method in cls.methods.items():
+                    method_data = {
+                        "path": method.path,
+                        "lineno": method.lineno,
+                        "end_lineno": method.end_lineno,
+                        "parameters": method.parameters,
+                        "class_name": method.class_name,
+                        "complexity": method.complexity,
+                        "complexity_rating": method.complexity_rating,
+                        "complexity_class": method.complexity_class
+                    }
+                    
+                    method_node = GraphNode(method_id, method.name, "method", method_data)
+                    nodes.append(method_node)
+                    
+                    # Contains edge from class to method
+                    contains_edge_id = f"{class_id}:contains:{method_id}"
+                    contains_edge = GraphEdge(contains_edge_id, class_id, method_id, "contains", {})
+                    edges.append(contains_edge)
+                    
+                    # Create edges for method calls
+                    DependencyGraph._create_call_edges(codebase, method, method_id, edges)
+            
+            # Create nodes for functions
+            for func_id, func in module.functions.items():
+                func_data = {
+                    "path": func.path,
+                    "lineno": func.lineno,
+                    "end_lineno": func.end_lineno,
+                    "parameters": func.parameters,
+                    "complexity": func.complexity,
+                    "complexity_rating": func.complexity_rating,
+                    "complexity_class": func.complexity_class
+                }
+                
+                func_node = GraphNode(func_id, func.name, "function", func_data)
+                nodes.append(func_node)
+                
+                # Contains edge from module to function
+                contains_edge_id = f"{module_id}:contains:{func_id}"
+                contains_edge = GraphEdge(contains_edge_id, module_id, func_id, "contains", {})
+                edges.append(contains_edge)
+                
+                # Create edges for function calls
+                DependencyGraph._create_call_edges(codebase, func, func_id, edges)
+        
+        return DependencyGraph(nodes, edges) 
         
