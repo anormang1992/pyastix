@@ -3,6 +3,9 @@ Web interface module for visualizing the dependency graph.
 """
 
 import webbrowser
+import sqlite3
+import json
+import os
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 import threading
@@ -32,6 +35,10 @@ class WebServer:
         self.templates_dir = package_dir / 'static' / 'templates'
         self.static_dir = package_dir / 'static'
         
+        # Initialize database for storing node positions and states
+        self.db_path = project_path / '.pyastix' / 'node_state.db'
+        self._ensure_db_exists()
+        
         # Create Flask app
         self.app = Flask(__name__, 
                          template_folder=str(self.templates_dir),
@@ -39,6 +46,96 @@ class WebServer:
         
         # Register routes
         self._register_routes()
+    
+    def _ensure_db_exists(self) -> None:
+        """
+        Ensure the database directory and file exist.
+        """
+        # Create .pyastix directory if it doesn't exist
+        db_dir = self.db_path.parent
+        db_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Initialize the database if it doesn't exist
+        conn = sqlite3.connect(str(self.db_path))
+        cursor = conn.cursor()
+        
+        # Create table for node positions and states if it doesn't exist
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS node_states (
+            node_id TEXT PRIMARY KEY,
+            x REAL,
+            y REAL,
+            is_fixed INTEGER DEFAULT 0
+        )
+        ''')
+        conn.commit()
+        conn.close()
+    
+    def _get_saved_node_states(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Get saved node positions and states from the database.
+        
+        Returns:
+            Dict[str, Dict[str, Any]]: Dictionary mapping node IDs to state information
+        """
+        conn = sqlite3.connect(str(self.db_path))
+        cursor = conn.cursor()
+        
+        # Query all node states
+        cursor.execute('SELECT node_id, x, y, is_fixed FROM node_states')
+        rows = cursor.fetchall()
+        
+        # Build dictionary of node states
+        node_states = {}
+        for row in rows:
+            node_id, x, y, is_fixed = row
+            node_states[node_id] = {
+                'x': x,
+                'y': y,
+                'fixed': bool(is_fixed)
+            }
+        
+        conn.close()
+        return node_states
+    
+    def _has_saved_state(self) -> bool:
+        """
+        Check if there is any saved state in the database.
+        
+        Returns:
+            bool: True if there are saved node states, False otherwise
+        """
+        conn = sqlite3.connect(str(self.db_path))
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT COUNT(*) FROM node_states')
+        count = cursor.fetchone()[0]
+        
+        conn.close()
+        return count > 0
+    
+    def _save_node_states(self, states: Dict[str, Dict[str, Any]]) -> None:
+        """
+        Save node positions and states to the database.
+        
+        Args:
+            states (Dict[str, Dict[str, Any]]): Dictionary mapping node IDs to state information
+        """
+        conn = sqlite3.connect(str(self.db_path))
+        cursor = conn.cursor()
+        
+        # Clear existing states
+        cursor.execute('DELETE FROM node_states')
+        
+        # Insert new states
+        for node_id, state in states.items():
+            cursor.execute(
+                'INSERT INTO node_states (node_id, x, y, is_fixed) VALUES (?, ?, ?, ?)',
+                (node_id, state.get('x', 0), state.get('y', 0), int(state.get('fixed', False)))
+            )
+        
+        conn.commit()
+        conn.close()
     
     def _register_routes(self) -> None:
         """
@@ -52,6 +149,15 @@ class WebServer:
         def graph():
             # Include focus module in the response if specified
             response_data = self.graph_data.to_dict()
+            
+            # Add saved node states if they exist
+            saved_states = self._get_saved_node_states()
+            if saved_states:
+                # Merge saved states with graph data
+                for node in response_data["nodes"]:
+                    if node["id"] in saved_states:
+                        node["savedState"] = saved_states[node["id"]]
+            
             if self.focus_module:
                 # Find the module node that matches the focus module
                 focus_node_id = None
@@ -65,6 +171,32 @@ class WebServer:
                     response_data["focusNodeId"] = focus_node_id
             
             return jsonify(response_data)
+        
+        @self.app.route('/api/save-state', methods=['POST'])
+        def save_state():
+            """Save node positions and states to the database."""
+            data = request.json
+            if not data or not isinstance(data, dict):
+                return jsonify({"error": "Invalid data format"}), 400
+                
+            # Check if there's existing state
+            has_existing = self._has_saved_state()
+            
+            # Save the state
+            self._save_node_states(data)
+            
+            return jsonify({
+                "success": True,
+                "message": "Node states saved successfully",
+                "overwrote": has_existing
+            })
+        
+        @self.app.route('/api/has-saved-state')
+        def has_saved_state():
+            """Check if there is any saved state."""
+            return jsonify({
+                "hasSavedState": self._has_saved_state()
+            })
         
         @self.app.route('/api/file')
         def file_content():

@@ -13,5 +13,6 @@ build/
 # Ignore dist
 dist/
 
-# Ignore pyastixignore
+# Ignore pyastix databse and ignore file
+.pyastix/
 .pyastixignore

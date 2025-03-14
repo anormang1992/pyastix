@@ -1,7 +1,7 @@
 // Configuration and constants
 const CONFIG = {
     // Layout and simulation
-    defaultLinkDistance: 120,
+    defaultLinkDistance: 100,
     defaultChargeStrength: -150,
     moduleChargeStrength: -700,
     defaultCollideRadius: 60,
@@ -134,6 +134,13 @@ const clearSelectionButton = document.getElementById('clear-selection');
 // Global variables
 const searchDropdown = document.getElementById('search-results-dropdown');
 
+// Global variables for storing node data and selections
+let graphData;
+let lastSelectedNode = null;
+let selectionPoints = [];
+let selectionPolygon = null;
+let hasLoadedSavedState = false;
+
 // Initialize the visualization
 window.addEventListener('DOMContentLoaded', () => {
     // Fetch the graph data
@@ -156,14 +163,14 @@ function fetchGraphData() {
     fetch('/api/graph')
         .then(response => response.json())
         .then(data => {
-            graph = data;
+            graphData = data;
             // Ensure nodes are not fixed on initialization
             resetNodePositions();
             
             // Handle focus node if provided from server
             if (data.focusNodeId) {
                 // Pre-position the focus node near the center for better initial layout
-                const focusNode = graph.nodes.find(n => n.id === data.focusNodeId);
+                const focusNode = graphData.nodes.find(n => n.id === data.focusNodeId);
                 if (focusNode) {
                     // Position at center with slight offset to avoid congestion
                     focusNode.x = graphContainer.clientWidth / 2 + 20;
@@ -180,7 +187,7 @@ function fetchGraphData() {
             // If there's a focus node, handle it immediately
             if (data.focusNodeId) {
                 // Get the node
-                const focusNode = graph.nodes.find(n => n.id === data.focusNodeId);
+                const focusNode = graphData.nodes.find(n => n.id === data.focusNodeId);
                 if (focusNode) {
                     // Ensure the node type is visible
                     if (!visibleTypes[focusNode.type]) {
@@ -244,7 +251,7 @@ function directFocusOnNode(node) {
 // Focus on a specific node (for search, etc.)
 function focusOnNode(nodeId) {
     // Find the node
-    const node = graph.nodes.find(n => n.id === nodeId);
+    const node = graphData.nodes.find(n => n.id === nodeId);
     if (!node) return;
     
     // Ensure the node type is visible
@@ -279,7 +286,7 @@ function focusOnNode(nodeId) {
 
 // Get incoming call count for a node
 function getIncomingCallCount(nodeId) {
-    return graph.edges.filter(edge => 
+    return graphData.edges.filter(edge => 
         (edge.target === nodeId || (edge.target.id && edge.target.id === nodeId)) && 
         edge.type === 'calls'
     ).length;
@@ -287,7 +294,7 @@ function getIncomingCallCount(nodeId) {
 
 // Get outgoing call count for a node
 function getOutgoingCallCount(nodeId) {
-    return graph.edges.filter(edge => 
+    return graphData.edges.filter(edge => 
         (edge.source === nodeId || (edge.source.id && edge.source.id === nodeId)) && 
         edge.type === 'calls'
     ).length;
@@ -425,7 +432,8 @@ function setupEventListeners() {
     
     if (linkDistanceSlider) {
         // Initialize with current value
-        linkDistanceValue.textContent = linkDistanceSlider.value;
+    
+        linkDistanceValue.textContent = linkDistanceSlider.value = linkDistance;
         
         // Update when slider is moved
         linkDistanceSlider.addEventListener('input', function() {
@@ -462,6 +470,9 @@ function setupEventListeners() {
             searchDropdown.classList.remove('active');
         }
     });
+
+    // Add event listener for the save button
+    document.getElementById('save-button').addEventListener('click', saveNodeStates);
 }
 
 // Tick function to update positions during simulation
@@ -557,12 +568,12 @@ function initializeGraph() {
         .force('y', d3.forceY().strength(0.01)); // Gentle force toward center y
     
     // Apply initial positions to improve layout
-    setInitialNodePositions();
+    applyInitialNodePositions();
     
     // Create links
     linkElements = g.append('g')
         .selectAll('line')
-        .data(graph.edges)
+        .data(graphData.edges)
         .enter()
         .append('line')
         .attr('class', d => {
@@ -582,7 +593,7 @@ function initializeGraph() {
     // Create nodes
     const nodeGroups = g.append('g')
         .selectAll('.node')
-        .data(graph.nodes)
+        .data(graphData.nodes)
         .enter()
         .append('g')
         .attr('class', d => `node ${d.type}`)
@@ -626,7 +637,7 @@ function initializeGraph() {
                         // If this node is selected, toggle fixed state of all selected nodes
                         const shouldFix = d.fx === null; // If this node is unfixed, fix all selected nodes
                         
-                        graph.nodes.forEach(node => {
+                        graphData.nodes.forEach(node => {
                             if (selectedNodes.has(node.id)) {
                                 if (shouldFix) {
                                     // Fix the node
@@ -686,8 +697,8 @@ function initializeGraph() {
     });
     
     // Start the simulation
-    simulation.nodes(graph.nodes).on('tick', updatePositions);
-    simulation.force('link').links(graph.edges);
+    simulation.nodes(graphData.nodes).on('tick', updatePositions);
+    simulation.force('link').links(graphData.edges);
     
     // Initialize fixed node styling
     updateFixedNodeStyling();
@@ -915,11 +926,14 @@ function dragEnded(event, d) {
     
     // If the node wasn't fixed before dragging, release it
     if (!d._wasFixed && !layoutFixed) {
-    d.fx = null;
-    d.fy = null;
+        d.fx = null;
+        d.fy = null;
+        d.fixed = false;
         // Restart with higher alpha for more natural movement when released
         simulation.alpha(0.5).restart();
     } else {
+        // Node remains fixed
+        d.fixed = true;
         // Fixed nodes get smaller alpha adjustment
         simulation.alpha(0.1).restart();
     }
@@ -940,7 +954,7 @@ function updateFixedNodeStyling() {
     // Then apply the appropriate class based on node state
     nodeElements.each(function(d) {
         const nodeElement = d3.select(this);
-        const isFixed = d.fx !== null && d.fy !== null;
+        const isFixed = (d.fx !== null && d.fy !== null) || d.fixed === true;
         const isSelected = selectedNode && d.id === selectedNode.id;
         
         if (isFixed && isSelected) {
@@ -1086,6 +1100,9 @@ function displaySearchResults(results, query) {
     
     // Add each result
     results.forEach(result => {
+        const item_container = document.createElement('div');
+        item_container.className = 'search-result-container';
+
         const item = document.createElement('div');
         item.className = 'search-result-item';
         
@@ -1097,25 +1114,6 @@ function displaySearchResults(results, query) {
         // Result name
         const nameContainer = document.createElement('div');
         nameContainer.className = 'search-result-name';
-        
-        const name = document.createElement('div');
-        // Highlight matching text in the label
-        const labelText = result.label;
-        const lowercaseLabel = labelText.toLowerCase();
-        const lowercaseQuery = query.toLowerCase();
-        
-        if (lowercaseLabel.includes(lowercaseQuery)) {
-            const matchIndex = lowercaseLabel.indexOf(lowercaseQuery);
-            const beforeMatch = labelText.substring(0, matchIndex);
-            const match = labelText.substring(matchIndex, matchIndex + query.length);
-            const afterMatch = labelText.substring(matchIndex + query.length);
-            
-            name.innerHTML = beforeMatch + '<span class="search-highlight">' + match + '</span>' + afterMatch;
-        } else {
-            name.textContent = labelText;
-        }
-        
-        nameContainer.appendChild(name);
         
         // Path (if available)
         if (result.data && result.data.path) {
@@ -1134,8 +1132,9 @@ function displaySearchResults(results, query) {
             focusOnNode(result.id);
             searchDropdown.classList.remove('active');
         });
-        
-        searchDropdown.appendChild(item);
+
+        item_container.appendChild(item);
+        searchDropdown.appendChild(item_container);
     });
     
     // Show the dropdown
@@ -1169,8 +1168,8 @@ function updateVisibility() {
     
     // Update edge visibility based on connected nodes
     linkElements.style('display', d => {
-        const sourceNode = graph.nodes.find(n => n.id === d.source.id || n.id === d.source);
-        const targetNode = graph.nodes.find(n => n.id === d.target.id || n.id === d.target);
+        const sourceNode = graphData.nodes.find(n => n.id === d.source.id || n.id === d.source);
+        const targetNode = graphData.nodes.find(n => n.id === d.target.id || n.id === d.target);
         
         return visibleEdgeTypes[d.type] && 
                sourceNode && targetNode && 
@@ -1210,11 +1209,11 @@ function capitalizeFirstLetter(string) {
 
 // Helper function to ensure nodes start in an unfixed state
 function resetNodePositions() {
-    if (!graph || !graph.nodes) return;
+    if (!graphData || !graphData.nodes) return;
     
     // Make sure all nodes are unfixed unless explicitly set to fixed
     if (!layoutFixed) {
-        graph.nodes.forEach(node => {
+        graphData.nodes.forEach(node => {
             node.fx = null;
             node.fy = null;
         });
@@ -1223,6 +1222,48 @@ function resetNodePositions() {
         if (nodeElements) {
             updateFixedNodeStyling();
         }
+    }
+}
+
+// Function to apply saved positions and fixed states
+function applyInitialNodePositions() {
+    // Check if nodes have saved state from the backend
+    let hasSavedPositions = false;
+    
+    graphData.nodes.forEach(node => {
+        if (node.savedState) {
+            hasSavedPositions = true;
+            
+            // Apply saved position if available
+            if (node.savedState.x !== undefined && node.savedState.y !== undefined) {
+                node.x = node.savedState.x;
+                node.y = node.savedState.y;
+                node.fixed = node.savedState.fixed;
+                
+                // If node is fixed, update its fx and fy
+                if (node.fixed) {
+                    node.fx = node.x;
+                    node.fy = node.y;
+                } else {
+                    // Ensure fx and fy are null if not fixed
+                    node.fx = null;
+                    node.fy = null;
+                }
+            }
+        }
+    });
+    
+    if (hasSavedPositions) {
+        // Update the state flag
+        hasLoadedSavedState = true;
+        
+        // If we have saved positions, update all nodes immediately
+        simulation.alpha(0.1).restart();
+        updatePositions();
+        updateFixedNodeStyling();
+    } else {
+        // Otherwise, use default positioning
+        setInitialNodePositions();
     }
 }
 
@@ -1397,7 +1438,7 @@ function isPointInPolygon(x, y, polygon) {
         const xj = polygon[j].x, yj = polygon[j].y;
         
         const intersect = ((yi > y) != (yj > y)) && 
-                         (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+                        (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
         if (intersect) inside = !inside;
     }
     return inside;
@@ -1462,10 +1503,11 @@ function fixSelectedNodes() {
     if (selectedNodes.size === 0) return;
     
     // Set fx and fy for each selected node to its current position
-    graph.nodes.forEach(node => {
+    graphData.nodes.forEach(node => {
         if (selectedNodes.has(node.id)) {
             node.fx = node.x;
             node.fy = node.y;
+            node.fixed = true;
         }
     });
     
@@ -1481,10 +1523,11 @@ function releaseSelectedNodes() {
     if (selectedNodes.size === 0) return;
     
     // Set fx and fy to null for each selected node
-    graph.nodes.forEach(node => {
+    graphData.nodes.forEach(node => {
         if (selectedNodes.has(node.id)) {
             node.fx = null;
             node.fy = null;
+            node.fixed = false;
         }
     });
     
@@ -1497,10 +1540,14 @@ function releaseSelectedNodes() {
 
 // Fix positions of all nodes
 function fixAllNodes() {
-    graph.nodes.forEach(node => {
+    graphData.nodes.forEach(node => {
         node.fx = node.x;
         node.fy = node.y;
+        node.fixed = true;
     });
+    
+    // Update node styling
+    updateFixedNodeStyling();
     
     // Restart the simulation with higher alpha
     simulation.alpha(0.8).restart();
@@ -1508,9 +1555,10 @@ function fixAllNodes() {
 
 // Release all nodes
 function releaseAllNodes() {
-    graph.nodes.forEach(node => {
+    graphData.nodes.forEach(node => {
         node.fx = null;
         node.fy = null;
+        node.fixed = false;
     });
     
     // Update node styling
@@ -1561,14 +1609,14 @@ function updateLinkDistance(newDistance) {
 
 // Apply initial positions to improve layout with crowsfoot pattern
 function setInitialNodePositions() {
-    if (!graph || !graph.nodes || graph.nodes.length === 0) return;
+    if (!graphData || !graphData.nodes || graphData.nodes.length === 0) return;
     
     // Group nodes by module
     const moduleGroups = {};
     const moduleNodes = [];
     
     // Find all modules
-    graph.nodes.forEach(node => {
+    graphData.nodes.forEach(node => {
         if (node.type === 'module') {
             moduleNodes.push(node);
             moduleGroups[node.id] = [node];
@@ -1576,14 +1624,14 @@ function setInitialNodePositions() {
     });
     
     // Group nodes with their containing modules
-    graph.edges.forEach(edge => {
+    graphData.edges.forEach(edge => {
         if (edge.type === 'contains') {
             const sourceId = edge.source.id || edge.source;
             const targetId = edge.target.id || edge.target;
             
             // Find the module node and the contained node
-            const moduleNode = graph.nodes.find(n => n.id === sourceId && n.type === 'module');
-            const containedNode = graph.nodes.find(n => n.id === targetId);
+            const moduleNode = graphData.nodes.find(n => n.id === sourceId && n.type === 'module');
+            const containedNode = graphData.nodes.find(n => n.id === targetId);
             
             if (moduleNode && containedNode && moduleGroups[moduleNode.id]) {
                 moduleGroups[moduleNode.id].push(containedNode);
@@ -1637,11 +1685,11 @@ function setInitialNodePositions() {
                     let parentClass = null;
                     if (node.type === 'method') {
                         // Check if there's a "contains" edge from a class to this method
-                        for (const edge of graph.edges) {
+                        for (const edge of graphData.edges) {
                             if (edge.type === 'contains') {
                                 const sourceId = edge.source.id || edge.source;
                                 const targetId = edge.target.id || edge.target;
-                                const sourceNode = graph.nodes.find(n => n.id === sourceId);
+                                const sourceNode = graphData.nodes.find(n => n.id === sourceId);
                                 
                                 if (targetId === node.id && sourceNode && sourceNode.type === 'class') {
                                     parentClass = sourceNode;
@@ -1655,7 +1703,7 @@ function setInitialNodePositions() {
                         // Position method around its class in a crowsfoot pattern
                         // Group methods of the same class together
                         const methodsOfSameClass = otherNodes.filter(n => {
-                            for (const edge of graph.edges) {
+                            for (const edge of graphData.edges) {
                                 if (edge.type === 'contains' && 
                                     (edge.source.id === parentClass.id || edge.source === parentClass.id) && 
                                     (edge.target.id === n.id || edge.target === n.id)) {
@@ -1742,11 +1790,11 @@ function setInitialNodePositions() {
                     // Find parent class for methods
                     let parentClass = null;
                     if (node.type === 'method') {
-                        for (const edge of graph.edges) {
+                        for (const edge of graphData.edges) {
                             if (edge.type === 'contains') {
                                 const sourceId = edge.source.id || edge.source;
                                 const targetId = edge.target.id || edge.target;
-                                const sourceNode = graph.nodes.find(n => n.id === sourceId);
+                                const sourceNode = graphData.nodes.find(n => n.id === sourceId);
                                 
                                 if (targetId === node.id && sourceNode && sourceNode.type === 'class') {
                                     parentClass = sourceNode;
@@ -1759,7 +1807,7 @@ function setInitialNodePositions() {
                     if (parentClass) {
                         // Position methods in a fan/crowsfoot pattern around their class
                         const methodsOfClass = otherNodes.filter(n => {
-                            for (const edge of graph.edges) {
+                            for (const edge of graphData.edges) {
                                 if (edge.type === 'contains' && 
                                     (edge.source.id === parentClass.id || edge.source === parentClass.id) && 
                                     (edge.target.id === n.id || edge.target === n.id)) {
@@ -1795,10 +1843,73 @@ function setInitialNodePositions() {
     }
     
     // Initialize nodes that don't belong to any module
-    graph.nodes.forEach(node => {
+    graphData.nodes.forEach(node => {
         if (!node.x || !node.y) {
             node.x = centerX + (Math.random() - 0.5) * containerWidth * 0.5;
             node.y = centerY + (Math.random() - 0.5) * containerHeight * 0.5;
         }
     });
+}
+
+// Function to save the current node states (positions and fixed status)
+function saveNodeStates() {
+    // Exit if the graph isn't initialized yet
+    if (!nodeElements) return;
+    
+    // Collect current node states
+    const nodeStates = {};
+    
+    nodeElements.each(node => {
+        nodeStates[node.id] = {
+            x: node.x,
+            y: node.y,
+            fixed: node.fixed || false
+        };
+    });
+    
+    // Check if there are existing saved states before saving
+    fetch('/api/has-saved-state')
+        .then(response => response.json())
+        .then(data => {
+            if (data.hasSavedState) {
+                // If there are existing states, confirm before overwriting
+                if (confirm("You already have a saved layout for this project. Do you want to overwrite it?")) {
+                    performSave(nodeStates);
+                }
+            } else {
+                performSave(nodeStates);
+            }
+        })
+        .catch(error => {
+            console.error('Error checking for saved states:', error);
+            // If there's an error checking, try to save anyway
+            performSave(nodeStates);
+        });
+}
+
+// Helper function to perform the actual save
+function performSave(nodeStates) {
+    fetch('/api/save-state', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(nodeStates)
+    })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Show success notification
+                alert("Layout saved successfully!");
+                
+                // Update hasLoadedSavedState to true since we now have a saved state
+                hasLoadedSavedState = true;
+            } else {
+                alert("Failed to save layout: " + (data.message || "Unknown error"));
+            }
+        })
+        .catch(error => {
+            console.error('Error saving node states:', error);
+            alert("Error saving layout. Please try again.");
+        });
 }
