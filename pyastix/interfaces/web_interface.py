@@ -1,11 +1,9 @@
 """
 Web interface module for visualizing the dependency graph.
 """
-
+import logging
 import webbrowser
 import sqlite3
-import json
-import os
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 import threading
@@ -13,6 +11,10 @@ from flask import Flask, render_template, jsonify, request, send_from_directory
 
 from pyastix.models.graph_element import DependencyGraph
 from pyastix.models.codebase import CodebaseStructure
+
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 class WebServer:
@@ -78,13 +80,19 @@ class WebServer:
         Returns:
             Dict[str, Dict[str, Any]]: Dictionary mapping node IDs to state information
         """
+        logger.info("Attempting to load saved node states from %s", self.db_path)
+        
+        if not self.db_path.exists():
+            logger.warning("Database file does not exist at %s", self.db_path)
+            return {}
+            
         conn = sqlite3.connect(str(self.db_path))
         cursor = conn.cursor()
         
         # Query all node states
         cursor.execute('SELECT node_id, x, y, is_fixed FROM node_states')
         rows = cursor.fetchall()
-        
+
         # Build dictionary of node states
         node_states = {}
         for row in rows:
@@ -152,11 +160,39 @@ class WebServer:
             
             # Add saved node states if they exist
             saved_states = self._get_saved_node_states()
+            logger.info("Found %d saved node states in the database", len(saved_states))
+            
             if saved_states:
+                # Get all node IDs from the graph data
+                graph_node_ids = {node["id"] for node in response_data["nodes"]}
+                saved_node_ids = set(saved_states.keys())
+                
+                # Find intersection and differences
+                matching_ids = graph_node_ids.intersection(saved_node_ids)
+                saved_only_ids = saved_node_ids - graph_node_ids
+
+                logger.info(
+                    """
+                    Node ID analysis:
+                    - Total graph nodes: %d
+                    - Total saved nodes: %d
+                    - Matching node IDs: %d
+                    - Saved-only node IDs (not in graph): %d
+                    """, 
+                    len(graph_node_ids), 
+                    len(saved_node_ids), 
+                    len(matching_ids), 
+                    len(saved_only_ids)
+                )
+                
                 # Merge saved states with graph data
+                saved_nodes_count = 0
                 for node in response_data["nodes"]:
                     if node["id"] in saved_states:
                         node["savedState"] = saved_states[node["id"]]
+                        saved_nodes_count += 1
+                
+                logger.info("Added saved states to %d out of %d nodes", saved_nodes_count, len(response_data['nodes']))
             
             if self.focus_module:
                 # Find the module node that matches the focus module
