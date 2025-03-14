@@ -2,7 +2,7 @@
 Test script to verify the updated maintainability index rating function.
 """
 
-from pyastix.complexity import get_maintainability_rating
+from pyastix.core.complexity import get_maintainability_rating
 
 def test_mi_ratings():
     """

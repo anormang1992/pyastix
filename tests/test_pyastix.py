@@ -11,9 +11,10 @@ from unittest.mock import patch, MagicMock
 # Ensure pyastix module is in the path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# These imports work with both new structure and backward compatibility layer
 from pyastix.parser import CodebaseParser, CodebaseStructure
 from pyastix.graph import DependencyGraphGenerator
-from pyastix.web_interface import WebServer
+from pyastix.interfaces.web_interface import WebServer
 
 
 def test_parser():

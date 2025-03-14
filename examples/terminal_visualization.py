@@ -9,8 +9,8 @@ from pathlib import Path
 # Add project root to path so we can import pyastix
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pyastix.parser import CodebaseParser
-from pyastix.graph import DependencyGraphGenerator
+from pyastix.core.parser import CodebaseParser
+from pyastix.core.graph import DependencyGraphGenerator
 from pyastix.interfaces.terminal_interface import TerminalRenderer
 
 

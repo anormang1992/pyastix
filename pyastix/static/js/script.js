@@ -1,12 +1,12 @@
 // Configuration and constants
 const CONFIG = {
     // Layout and simulation
-    defaultLinkDistance: 100,
-    defaultChargeStrength: -100,
-    moduleChargeStrength: -500,
-    defaultCollideRadius: 50,
+    defaultLinkDistance: 120,
+    defaultChargeStrength: -150,
+    moduleChargeStrength: -700,
+    defaultCollideRadius: 60,
     linkStrength: {
-        contains: 0.8,
+        contains: 0.7,
         calls: 0.3,
         imports: 0.5,
         inherits: 0.7,
@@ -517,23 +517,44 @@ function initializeGraph() {
         .force('link', d3.forceLink().id(d => d.id).distance(d => {
             // Store the initial distance for each link
             d.distance = linkDistance;
+            
+            // Customize distances by relationship type
+            if (d.type === 'contains') {
+                // Use varying distances for contains relationships based on node types
+                if (d.source.type === 'module' && d.target.type === 'class') {
+                    return linkDistance * 1.2; // More space for module->class
+                } else if (d.source.type === 'class' && d.target.type === 'method') {
+                    return linkDistance * 0.8; // Tighter for class->method
+                }
+            }
+            
             return linkDistance;
         }).strength(d => {
             // Apply different strengths based on link type
             return CONFIG.linkStrength[d.type] || CONFIG.linkStrength.default;
         }))
         .force('charge', d3.forceManyBody().strength(d => {
-            // Apply stronger repulsion for modules
-            return d.type === 'module' ? CONFIG.moduleChargeStrength : CONFIG.defaultChargeStrength;
+            // Apply stronger repulsion for modules and classes
+            if (d.type === 'module') return CONFIG.moduleChargeStrength;
+            if (d.type === 'class') return CONFIG.moduleChargeStrength * 0.6;
+            return CONFIG.defaultChargeStrength;
         }))
         .force('center', d3.forceCenter(
             graphContainer.clientWidth / 2,
             graphContainer.clientHeight / 2
         ).strength(CONFIG.centerForceStrength))
         .force('collide', d3.forceCollide(d => {
-            // Use larger collision radius for modules
-            return d.type === 'module' ? CONFIG.defaultCollideRadius * 1.5 : CONFIG.defaultCollideRadius;
-        }));
+            // Enhanced collision radius based on node type
+            const radiusMultiplier = {
+                'module': 1.8,
+                'class': 1.5,
+                'method': 1.2,
+                'function': 1.2
+            };
+            return CONFIG.defaultCollideRadius * (radiusMultiplier[d.type] || 1);
+        }).iterations(2)) // More iterations for better collision resolution
+        .force('x', d3.forceX().strength(0.01)) // Gentle force toward center x
+        .force('y', d3.forceY().strength(0.01)); // Gentle force toward center y
     
     // Apply initial positions to improve layout
     setInitialNodePositions();
@@ -1538,7 +1559,7 @@ function updateLinkDistance(newDistance) {
     simulation.alpha(0.5).restart();
 }
 
-// Apply initial positions to improve layout
+// Apply initial positions to improve layout with crowsfoot pattern
 function setInitialNodePositions() {
     if (!graph || !graph.nodes || graph.nodes.length === 0) return;
     
@@ -1570,7 +1591,7 @@ function setInitialNodePositions() {
         }
     });
     
-    // Calculate module positions - arrange in a grid or circle based on number
+    // Calculate module positions
     const containerWidth = graphContainer.clientWidth;
     const containerHeight = graphContainer.clientHeight;
     const centerX = containerWidth / 2;
@@ -1585,17 +1606,84 @@ function setInitialNodePositions() {
             moduleNode.x = centerX + radius * Math.cos(angle);
             moduleNode.y = centerY + radius * Math.sin(angle);
             
-            // Apply a slight offset to nodes in this module's group
+            // Apply crowsfoot pattern to nodes in this module's group
             if (moduleGroups[moduleNode.id]) {
-                const groupNodes = moduleGroups[moduleNode.id];
-                const groupRadius = 50 + groupNodes.length * 5; // Radius grows with group size
+                const groupNodes = moduleGroups[moduleNode.id].filter(n => n !== moduleNode);
                 
-                groupNodes.forEach((node, nodeIndex) => {
-                    if (node !== moduleNode) { // Skip the module itself
-                        // Position in smaller circle around module
-                        const nodeAngle = (nodeIndex / groupNodes.length) * 2 * Math.PI;
-                        node.x = moduleNode.x + groupRadius * 0.5 * Math.cos(nodeAngle);
-                        node.y = moduleNode.y + groupRadius * 0.5 * Math.sin(nodeAngle);
+                // Sort nodes by type for more structured layout (classes first, then functions, then methods)
+                groupNodes.sort((a, b) => {
+                    const typeOrder = { 'class': 0, 'function': 1, 'method': 2 };
+                    return (typeOrder[a.type] || 3) - (typeOrder[b.type] || 3);
+                });
+                
+                // Separate class nodes and other nodes
+                const classNodes = groupNodes.filter(n => n.type === 'class');
+                const otherNodes = groupNodes.filter(n => n.type !== 'class');
+                
+                // Position class nodes in a primary circle around the module
+                const classRadius = 80 + classNodes.length * 10;
+                classNodes.forEach((node, nodeIndex) => {
+                    // Position classes in a wider circle around module
+                    // Distribute evenly but with slight randomization
+                    const sectorSize = (2 * Math.PI) / Math.max(classNodes.length, 4);
+                    const nodeAngle = angle + sectorSize * nodeIndex + (Math.random() * 0.2 - 0.1);
+                    node.x = moduleNode.x + classRadius * Math.cos(nodeAngle);
+                    node.y = moduleNode.y + classRadius * Math.sin(nodeAngle);
+                });
+                
+                // Position method/function nodes around their classes or the module directly
+                otherNodes.forEach((node, nodeIndex) => {
+                    // Find if this node belongs to a class (for methods)
+                    let parentClass = null;
+                    if (node.type === 'method') {
+                        // Check if there's a "contains" edge from a class to this method
+                        for (const edge of graph.edges) {
+                            if (edge.type === 'contains') {
+                                const sourceId = edge.source.id || edge.source;
+                                const targetId = edge.target.id || edge.target;
+                                const sourceNode = graph.nodes.find(n => n.id === sourceId);
+                                
+                                if (targetId === node.id && sourceNode && sourceNode.type === 'class') {
+                                    parentClass = sourceNode;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (parentClass) {
+                        // Position method around its class in a crowsfoot pattern
+                        // Group methods of the same class together
+                        const methodsOfSameClass = otherNodes.filter(n => {
+                            for (const edge of graph.edges) {
+                                if (edge.type === 'contains' && 
+                                    (edge.source.id === parentClass.id || edge.source === parentClass.id) && 
+                                    (edge.target.id === n.id || edge.target === n.id)) {
+                                    return true;
+                                }
+                            }
+                            return false;
+                        });
+                        
+                        const methodIndex = methodsOfSameClass.indexOf(node);
+                        const methodCount = methodsOfSameClass.length;
+                        
+                        if (methodCount > 0) {
+                            // Use sector-based positioning for a more structured layout
+                            const sectorAngle = Math.PI / 2; // 90 degrees sector
+                            const baseAngle = Math.atan2(parentClass.y - moduleNode.y, parentClass.x - moduleNode.x);
+                            const methodAngle = baseAngle - sectorAngle/2 + (sectorAngle * methodIndex / methodCount);
+                            const methodRadius = 40 + (methodIndex % 2) * 15; // Alternate distances
+                            
+                            node.x = parentClass.x + methodRadius * Math.cos(methodAngle);
+                            node.y = parentClass.y + methodRadius * Math.sin(methodAngle);
+                        }
+                    } else {
+                        // Position unattached functions around the module
+                        const functionRadius = 60 + nodeIndex * 5;
+                        const functionAngle = angle + (Math.PI * 2 / otherNodes.length) * nodeIndex;
+                        node.x = moduleNode.x + functionRadius * Math.cos(functionAngle);
+                        node.y = moduleNode.y + functionRadius * Math.sin(functionAngle);
                     }
                 });
             }
@@ -1616,17 +1704,90 @@ function setInitialNodePositions() {
             moduleNode.x = startX + col * cellWidth;
             moduleNode.y = startY + row * cellHeight;
             
-            // Apply a slight offset to nodes in this module's group
+            // Apply crowsfoot pattern to nodes in this module's group
             if (moduleGroups[moduleNode.id]) {
-                const groupNodes = moduleGroups[moduleNode.id];
-                const groupRadius = 40; // Fixed radius for grid layout
+                const groupNodes = moduleGroups[moduleNode.id].filter(n => n !== moduleNode);
                 
-                groupNodes.forEach((node, nodeIndex) => {
-                    if (node !== moduleNode) { // Skip the module itself
-                        // Position in smaller circle around module
-                        const nodeAngle = (nodeIndex / groupNodes.length) * 2 * Math.PI;
-                        node.x = moduleNode.x + groupRadius * Math.cos(nodeAngle);
-                        node.y = moduleNode.y + groupRadius * Math.sin(nodeAngle);
+                // Sort nodes by type for more structured layout (classes first, then functions, then methods)
+                groupNodes.sort((a, b) => {
+                    const typeOrder = { 'class': 0, 'function': 1, 'method': 2 };
+                    return (typeOrder[a.type] || 3) - (typeOrder[b.type] || 3);
+                });
+                
+                // Separate class nodes and other nodes
+                const classNodes = groupNodes.filter(n => n.type === 'class');
+                const otherNodes = groupNodes.filter(n => n.type !== 'class');
+                
+                // Position classes in cardinal directions (N, E, S, W)
+                const directions = [
+                    {x: 0, y: -1},  // North
+                    {x: 1, y: 0},   // East
+                    {x: 0, y: 1},   // South
+                    {x: -1, y: 0},  // West
+                    {x: 0.7, y: -0.7}, // NE
+                    {x: 0.7, y: 0.7},  // SE
+                    {x: -0.7, y: 0.7}, // SW
+                    {x: -0.7, y: -0.7} // NW
+                ];
+                
+                classNodes.forEach((node, i) => {
+                    const dir = directions[i % directions.length];
+                    const distance = 70 + Math.floor(i / directions.length) * 20;
+                    node.x = moduleNode.x + dir.x * distance;
+                    node.y = moduleNode.y + dir.y * distance;
+                });
+                
+                // Position methods and functions
+                otherNodes.forEach((node, i) => {
+                    // Find parent class for methods
+                    let parentClass = null;
+                    if (node.type === 'method') {
+                        for (const edge of graph.edges) {
+                            if (edge.type === 'contains') {
+                                const sourceId = edge.source.id || edge.source;
+                                const targetId = edge.target.id || edge.target;
+                                const sourceNode = graph.nodes.find(n => n.id === sourceId);
+                                
+                                if (targetId === node.id && sourceNode && sourceNode.type === 'class') {
+                                    parentClass = sourceNode;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (parentClass) {
+                        // Position methods in a fan/crowsfoot pattern around their class
+                        const methodsOfClass = otherNodes.filter(n => {
+                            for (const edge of graph.edges) {
+                                if (edge.type === 'contains' && 
+                                    (edge.source.id === parentClass.id || edge.source === parentClass.id) && 
+                                    (edge.target.id === n.id || edge.target === n.id)) {
+                                    return true;
+                                }
+                            }
+                            return false;
+                        });
+                        
+                        const methodIndex = methodsOfClass.indexOf(node);
+                        const fanAngle = Math.PI * 0.6; // Use 60 degree fan for the crowsfoot pattern
+                        const methodCount = methodsOfClass.length;
+                        
+                        // Calculate base angle (direction from module to class)
+                        const baseAngle = Math.atan2(parentClass.y - moduleNode.y, parentClass.x - moduleNode.x);
+                        
+                        // Position methods in a fan/crowsfoot pattern
+                        const angle = baseAngle - fanAngle/2 + fanAngle * (methodIndex / Math.max(methodCount - 1, 1));
+                        const radius = 40 + (methodIndex % 3) * 10; // Vary radius slightly for staggered effect
+                        
+                        node.x = parentClass.x + radius * Math.cos(angle);
+                        node.y = parentClass.y + radius * Math.sin(angle);
+                    } else {
+                        // Position free functions around the module
+                        const angle = (i / otherNodes.length) * 2 * Math.PI;
+                        const radius = 50;
+                        node.x = moduleNode.x + radius * Math.cos(angle);
+                        node.y = moduleNode.y + radius * Math.sin(angle);
                     }
                 });
             }

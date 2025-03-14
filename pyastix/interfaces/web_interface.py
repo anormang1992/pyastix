@@ -8,8 +8,8 @@ from typing import Dict, List, Any, Optional
 import threading
 from flask import Flask, render_template, jsonify, request, send_from_directory
 
-from pyastix.graph import DependencyGraph
-from pyastix.parser import CodebaseStructure
+from pyastix.models.graph_element import DependencyGraph
+from pyastix.models.codebase import CodebaseStructure
 
 
 class WebServer:

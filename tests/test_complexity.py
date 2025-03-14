@@ -2,7 +2,7 @@
 Test script to verify the new radon-based complexity calculations.
 """
 
-from pyastix.complexity import calculate_complexity, get_complexity_rating, extract_function_complexities
+from pyastix.core.complexity import calculate_complexity, get_complexity_rating, extract_function_complexities
 import os
 
 def test_calculate_complexity():

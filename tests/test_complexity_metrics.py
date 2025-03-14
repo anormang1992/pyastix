@@ -4,7 +4,7 @@ Test script to verify maintainability index and complexity metrics.
 
 import os
 import tempfile
-from pyastix.complexity import (
+from pyastix.core.complexity import (
     calculate_complexity,
     get_complexity_rating,
     calculate_maintainability_index,

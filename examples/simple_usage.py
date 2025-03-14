@@ -5,8 +5,9 @@ Simple example of using Pyastix to analyze a project and visualize the result.
 import argparse
 from pathlib import Path
 
-from pyastix.parser import CodebaseParser  
-from pyastix.graph import DependencyGraphGenerator
+# The imports below will work with both the new structure and the backward compatibility layer
+from pyastix.core.parser import CodebaseParser  
+from pyastix.core.graph import DependencyGraphGenerator
 from pyastix.interfaces.web_interface import WebServer
 
 

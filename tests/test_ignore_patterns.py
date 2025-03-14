@@ -11,7 +11,7 @@ import tempfile
 # Ensure pyastix module is in the path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pyastix.parser import IgnorePattern, IgnorePatternList
+from pyastix.core.parser import IgnorePattern, IgnorePatternList
 
 
 class TestIgnorePattern:

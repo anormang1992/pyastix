@@ -7,10 +7,10 @@ import sys
 import click
 from pathlib import Path
 
-from .parser import CodebaseParser
-from .graph import DependencyGraphGenerator
-from .interfaces.web_interface import WebServer
-from .interfaces.terminal_interface import TerminalRenderer
+from pyastix.core.parser import CodebaseParser
+from pyastix.core.graph import DependencyGraphGenerator
+from pyastix.interfaces.web_interface import WebServer
+from pyastix.interfaces.terminal_interface import TerminalRenderer
 
 
 @click.command()

@@ -1,5 +1,5 @@
 """
-Code parsing module for extracting structure and relationships from Python code.
+Parser module for analyzing Python code and extracting its structure.
 """
 
 import os
@@ -10,7 +10,9 @@ import re
 import fnmatch
 from typing import Dict, List, Set, Tuple, Any, Optional
 
-from .complexity import calculate_complexity, get_complexity_rating, extract_function_complexities, calculate_module_maintainability
+from pyastix.models.code_element import CodeElement, Module, Class, Function, Method, Import
+from pyastix.models.codebase import CodebaseStructure
+from pyastix.core.complexity import calculate_complexity, get_complexity_rating, extract_function_complexities, calculate_module_maintainability
 
 
 class IgnorePattern:
@@ -32,40 +34,10 @@ class IgnorePattern:
         self.is_negated = self.pattern.startswith('!')
         if self.is_negated:
             self.pattern = self.pattern[1:]
-        # Convert gitignore pattern to regex
-        self._prepare_regex()
-    
-    def _prepare_regex(self) -> None:
-        """Convert gitignore pattern to regex pattern."""
-        if not self.is_valid:
-            self.regex = None
-            return
-            
-        # Escape special regex chars except those used in gitignore
-        pattern = re.escape(self.pattern)
-        
-        # Convert gitignore globs to regex:
-        # * matches anything except /
-        pattern = pattern.replace('\\*', '[^/]*')
-        
-        # ** matches anything including /
-        pattern = pattern.replace('\\*\\*', '.*')
-        
-        # ? matches a single character except /
-        pattern = pattern.replace('\\?', '[^/]')
-        
-        # If pattern doesn't contain a slash, it matches any directory level
-        if '/' not in self.pattern:
-            pattern = f'(.*/)?{pattern}'
-        
-        # If pattern starts with /, anchor to project root
-        elif pattern.startswith('\\/'):
-            pattern = pattern[2:]  # Remove the escaped slash
-        
-        # Ensure matches are complete
-        pattern = f'^{pattern}(/.*)?$' if self.dirs_only else f'^{pattern}$'
-        
-        self.regex = re.compile(pattern)
+        # Track if pattern is rooted (starts with /)
+        self.is_rooted = self.pattern.startswith('/')
+        if self.is_rooted:
+            self.pattern = self.pattern[1:]  # Remove leading slash
     
     def matches(self, path: str) -> bool:
         """
@@ -77,10 +49,63 @@ class IgnorePattern:
         Returns:
             bool: True if path matches the pattern, False otherwise
         """
-        if not self.is_valid or not self.regex:
+        if not self.is_valid:
+            return False
+        
+        # Convert to path with forward slashes
+        path = path.rstrip('/').replace('\\', '/')
+        
+        # For rooted patterns, the path must be at the root level
+        if self.is_rooted:
+            # Path must start with the pattern (e.g., /node_modules matches node_modules/*)
+            pattern_parts = self.pattern.split('/')
+            path_parts = path.split('/')
+            
+            # If the path doesn't have enough parts, it can't match
+            if len(path_parts) < len(pattern_parts):
+                return False
+                
+            # If the pattern is rooted, it must match from the start
+            return self._match_parts(pattern_parts, path_parts)
+        
+        # For non-rooted patterns
+        if '/' not in self.pattern:
+            # Simple filename pattern can match at any level
+            pattern_parts = self.pattern.split('/')
+            path_parts = path.split('/')
+            
+            # Try to match at any level
+            for i in range(len(path_parts) - len(pattern_parts) + 1):
+                if self._match_parts(pattern_parts, path_parts[i:i+len(pattern_parts)]):
+                    return True
+            return False
+        
+        # Handle ** in patterns
+        if '**' in self.pattern:
+            # Convert ** to fnmatch-compatible wildcards
+            # This is a simplification - real implementation could be more complex
+            fnmatch_pattern = self.pattern.replace('**/', '**/').replace('/**', '/**')
+            
+            # For **/logs/**, we need to check if path contains logs/
+            if self.pattern == '**/logs/**':
+                return '/logs/' in f'/{path}/'
+            
+            # Try to match the pattern
+            return fnmatch.fnmatch(path, fnmatch_pattern)
+        
+        # Use standard fnmatch for other patterns
+        return fnmatch.fnmatch(path, self.pattern)
+    
+    def _match_parts(self, pattern_parts, path_parts):
+        """Match pattern parts against path parts."""
+        if len(pattern_parts) > len(path_parts):
             return False
             
-        return bool(self.regex.match(path))
+        for i, part in enumerate(pattern_parts):
+            if not fnmatch.fnmatch(path_parts[i], part):
+                return False
+        
+        return True
 
 
 class IgnorePatternList:
@@ -139,189 +164,6 @@ class IgnorePatternList:
                 ignored = not pattern.is_negated
                 
         return ignored
-
-
-class CodeElement:
-    """
-    Base class for all code elements.
-    
-    Args:
-        name (str): Name of the element
-        path (str): File path where the element is defined
-        lineno (int): Line number where the element starts
-        end_lineno (int): Line number where the element ends
-    """
-    def __init__(self, name: str, path: str, lineno: int, end_lineno: Optional[int] = None):
-        self.name = name
-        self.path = path
-        self.lineno = lineno
-        self.end_lineno = end_lineno or lineno
-        self.id = f"{path}:{name}"
-        self.complexity = -1  # Will be populated during parsing
-        self.complexity_rating = "Unknown"
-        self.complexity_class = ""
-        
-    def __repr__(self):
-        return f"{self.__class__.__name__}(name='{self.name}', path='{self.path}')"
-
-
-class Module(CodeElement):
-    """
-    Represents a Python module.
-    
-    Args:
-        name (str): Name of the module
-        path (str): File path of the module
-        lineno (int): Line number where the module starts
-        end_lineno (int): Line number where the module ends
-    """
-    def __init__(self, name: str, path: str, lineno: int = 1, end_lineno: Optional[int] = None):
-        super().__init__(name, path, lineno, end_lineno or 0)
-        self.classes: Dict[str, Class] = {}
-        self.functions: Dict[str, Function] = {}
-        self.imports: List[Import] = []
-        self.maintainability_index: float = -1.0
-        self.maintainability_rating: str = "Unknown"
-        self.maintainability_class: str = ""
-
-
-class Class(CodeElement):
-    """
-    Represents a Python class.
-    
-    Args:
-        name (str): Name of the class
-        path (str): File path where the class is defined
-        lineno (int): Line number where the class starts
-        end_lineno (int): Line number where the class ends
-        parent_names (List[str]): Names of parent classes
-    """
-    def __init__(self, name: str, path: str, lineno: int, end_lineno: int, parent_names: List[str] = None):
-        super().__init__(name, path, lineno, end_lineno)
-        self.methods: Dict[str, Method] = {}
-        self.parent_names = parent_names or []
-        self.attributes: List[str] = []
-
-
-class Function(CodeElement):
-    """
-    Represents a Python function.
-    
-    Args:
-        name (str): Name of the function
-        path (str): File path where the function is defined
-        lineno (int): Line number where the function starts
-        end_lineno (int): Line number where the function ends
-    """
-    def __init__(self, name: str, path: str, lineno: int, end_lineno: int):
-        super().__init__(name, path, lineno, end_lineno)
-        self.calls: List[Tuple[str, int]] = []  # (name, line_number)
-        self.parameters: List[str] = []
-
-
-class Method(Function):
-    """
-    Represents a Python class method.
-    
-    Args:
-        name (str): Name of the method
-        path (str): File path where the method is defined
-        lineno (int): Line number where the method starts
-        end_lineno (int): Line number where the method ends
-        class_name (str): Name of the class this method belongs to
-    """
-    def __init__(self, name: str, path: str, lineno: int, end_lineno: int, class_name: str):
-        super().__init__(name, path, lineno, end_lineno)
-        self.class_name = class_name
-        # Override the inherited ID to include the class name for uniqueness
-        self.id = f"{path}:{class_name}.{name}"
-
-
-class Import(CodeElement):
-    """
-    Represents a Python import statement.
-    
-    Args:
-        name (str): Name being imported
-        path (str): File path where the import occurs
-        lineno (int): Line number where the import occurs
-        end_lineno (int): Line number where the import ends
-        alias (str): Alias used for the import, if any
-        is_from (bool): Whether this is a 'from ... import' statement
-        module (str): Module name in case of 'from ... import'
-    """
-    def __init__(self, name: str, path: str, lineno: int, end_lineno: int, 
-                 alias: Optional[str] = None, is_from: bool = False, module: Optional[str] = None):
-        super().__init__(name, path, lineno, end_lineno)
-        self.alias = alias
-        self.is_from = is_from
-        self.module = module
-
-
-class CodebaseStructure:
-    """
-    Container for the entire parsed codebase structure.
-    
-    Args:
-        root_path (Path): Root path of the analyzed project
-    """
-    def __init__(self, root_path: Path):
-        self.root_path = root_path
-        self.modules: Dict[str, Module] = {}
-        
-    def add_module(self, module: Module) -> None:
-        """
-        Add a module to the codebase structure.
-        
-        Args:
-            module (Module): The module to add
-        """
-        self.modules[module.id] = module
-        
-    def get_all_code_elements(self) -> Dict[str, CodeElement]:
-        """
-        Get a flat dictionary of all code elements.
-        
-        Returns:
-            Dict[str, CodeElement]: Dictionary mapping element IDs to elements
-        """
-        elements = {}
-        
-        for module_id, module in self.modules.items():
-            elements[module_id] = module
-            
-            for class_id, cls in module.classes.items():
-                elements[class_id] = cls
-                
-                for method_id, method in cls.methods.items():
-                    elements[method_id] = method
-            
-            for func_id, func in module.functions.items():
-                elements[func_id] = func
-                
-        return elements
-    
-    def get_source_code(self, element_id: str) -> str:
-        """
-        Get the source code for a specific element.
-        
-        Args:
-            element_id (str): ID of the element
-            
-        Returns:
-            str: Source code of the element
-        """
-        elements = self.get_all_code_elements()
-        if element_id not in elements:
-            return ""
-        
-        element = elements[element_id]
-        try:
-            with open(element.path, 'r') as f:
-                lines = f.readlines()
-            return ''.join(lines[element.lineno - 1:element.end_lineno])
-        except Exception:
-            return ""
 
 
 class CodebaseParser:

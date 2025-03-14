@@ -19,7 +19,7 @@ from rich.live import Live
 from rich.console import Group
 from rich import print as rprint
 
-from pyastix.graph import DependencyGraph
+from pyastix.models.graph_element import DependencyGraph
 
 
 class TerminalRenderer:
@@ -51,8 +51,6 @@ class TerminalRenderer:
             'inherits': (' ↓ ', 'bold blue')
         }
         
-        # Create a NetworkX graph for layout algorithms
-        self.nx_graph = self._create_nx_graph()
     
     def render(self) -> None:
         """
@@ -69,14 +67,9 @@ class TerminalRenderer:
         header = self._create_header()
         components.append(header)
         
-        # Choose rendering mode based on graph size and terminal size
-        if len(self.graph_data.nodes) > 50 or terminal_width < 100:
-            # For larger graphs or smaller terminals, use a hierarchical text-based view
-            graph_view = self._create_hierarchical_view()
-        else:
-            # For smaller graphs with enough terminal space, render a visual graph
-            graph_view = self._create_visual_graph(terminal_width, terminal_height)
-        
+
+        graph_view = self._create_hierarchical_view()
+
         components.append(graph_view)
         
         # Add footer with legend
@@ -287,173 +280,6 @@ class TerminalRenderer:
         
         return root
     
-    def _create_visual_graph(self, width: int, height: int) -> Any:
-        """
-        Create a visual representation of the graph using ASCII/Unicode characters.
-        
-        Args:
-            width (int): Available width for rendering
-            height (int): Available height for rendering
-            
-        Returns:
-            Any: Rich renderable
-        """
-        # Apply a layout algorithm to position nodes
-        try:
-            # Compute positions - use spring layout for natural-looking graphs
-            positions = nx.spring_layout(self.nx_graph, seed=42)
-            
-            # Scale positions to fit terminal dimensions
-            # Leave margins of 2 characters on each side
-            min_x = min(pos[0] for pos in positions.values())
-            max_x = max(pos[0] for pos in positions.values())
-            min_y = min(pos[1] for pos in positions.values())
-            max_y = max(pos[1] for pos in positions.values())
-            
-            # Adjust for terminal aspect ratio (characters are taller than wide)
-            aspect_ratio = 2.5  # Approximate ratio of character height to width
-            
-            # Scale factors for x and y
-            if max_x > min_x:
-                x_scale = (width - 4) / (max_x - min_x)
-            else:
-                x_scale = 1
-                
-            if max_y > min_y:
-                y_scale = (height - 4) / (max_y - min_y) / aspect_ratio
-            else:
-                y_scale = 1
-            
-            # Use the smaller scale to maintain aspect ratio
-            scale = min(x_scale, y_scale)
-            
-            # Initialize the canvas
-            canvas = [[' ' for _ in range(width)] for _ in range(height)]
-            
-            # Map of node positions on the canvas
-            node_positions = {}
-            
-            # Draw nodes on the canvas
-            for node_id, pos in positions.items():
-                # Scale and shift to fit in terminal
-                x = int((pos[0] - min_x) * scale) + 2
-                y = int((pos[1] - min_y) * scale * aspect_ratio) + 2
-                
-                # Ensure position is within bounds
-                x = max(0, min(x, width - 1))
-                y = max(0, min(y, height - 1))
-                
-                # Store node position
-                node_positions[node_id] = (x, y)
-                
-                # Get node from graph
-                node = next((n for n in self.graph_data.nodes if n.id == node_id), None)
-                if node:
-                    # Place node symbol on canvas
-                    symbol, _ = self.node_styles.get(node.type, ('•', 'white'))
-                    canvas[y][x] = symbol
-            
-            # Draw edges on the canvas using Bresenham's line algorithm
-            for edge in self.graph_data.edges:
-                if edge.source in node_positions and edge.target in node_positions:
-                    start = node_positions[edge.source]
-                    end = node_positions[edge.target]
-                    
-                    # Get edge symbol
-                    symbol, _ = self.edge_styles.get(edge.type, ('-', 'white'))
-                    
-                    # Draw line
-                    self._draw_line(canvas, start[0], start[1], end[0], end[1], symbol)
-            
-            # Create styled text from canvas
-            text = self._canvas_to_text(canvas, node_positions)
-            
-            # Return a panel with the graph
-            return Panel.fit(text, title="Dependency Graph")
-            
-        except Exception as e:
-            # Fall back to hierarchical view if visual fails
-            error_message = Text(f"Error rendering visual graph: {e}\nFalling back to hierarchical view...", style="red")
-            tree = self._create_hierarchical_view()
-            return Group(error_message, tree)
-    
-    def _draw_line(self, canvas: List[List[str]], x0: int, y0: int, x1: int, y1: int, symbol: str) -> None:
-        """
-        Draw a line on the canvas using Bresenham's algorithm.
-        
-        Args:
-            canvas (List[List[str]]): Canvas to draw on
-            x0, y0 (int): Start coordinates
-            x1, y1 (int): End coordinates
-            symbol (str): Character to use for the line
-        """
-        height = len(canvas)
-        width = len(canvas[0]) if height > 0 else 0
-        
-        # Compute Bresenham's line algorithm
-        dx = abs(x1 - x0)
-        dy = abs(y1 - y0)
-        sx = 1 if x0 < x1 else -1
-        sy = 1 if y0 < y1 else -1
-        err = dx - dy
-        
-        while True:
-            # Skip start and end points (they contain node symbols)
-            if not ((x0 == x1 and y0 == y1) or (x0 == x0 and y0 == y0)):
-                # Make sure we're within bounds
-                if 0 <= y0 < height and 0 <= x0 < width:
-                    # Only draw if the position is empty
-                    if canvas[y0][x0] == ' ':
-                        canvas[y0][x0] = symbol
-            
-            if x0 == x1 and y0 == y1:
-                break
-                
-            e2 = 2 * err
-            if e2 > -dy:
-                err -= dy
-                x0 += sx
-            if e2 < dx:
-                err += dx
-                y0 += sy
-    
-    def _canvas_to_text(self, canvas: List[List[str]], node_positions: Dict[str, Tuple[int, int]]) -> Text:
-        """
-        Convert canvas to Rich Text with proper styling.
-        
-        Args:
-            canvas (List[List[str]]): Canvas with the graph drawing
-            node_positions (Dict[str, Tuple[int, int]]): Positions of nodes on the canvas
-            
-        Returns:
-            Text: Styled text for rendering
-        """
-        result = Text()
-        
-        # Map of symbols to node types and edge types
-        symbol_to_type = {}
-        for node_type, (symbol, _) in self.node_styles.items():
-            symbol_to_type[symbol] = ('node', node_type)
-        for edge_type, (symbol, _) in self.edge_styles.items():
-            symbol_to_type[symbol] = ('edge', edge_type)
-        
-        # Process each row
-        for row in canvas:
-            for char in row:
-                if char in symbol_to_type:
-                    category, item_type = symbol_to_type[char]
-                    if category == 'node':
-                        _, style = self.node_styles[item_type]
-                        result.append(char, style=style)
-                    else:  # edge
-                        _, style = self.edge_styles[item_type]
-                        result.append(char, style=style)
-                else:
-                    result.append(char)
-            result.append('\n')
-        
-        return result
-    
     def _create_footer(self) -> Group:
         """
         Create a footer with legend and tips.
@@ -530,35 +356,6 @@ class TerminalRenderer:
         
         return Group(*components)
     
-    def _create_nx_graph(self) -> nx.DiGraph:
-        """
-        Create a NetworkX graph from the dependency graph.
-        
-        Returns:
-            nx.DiGraph: NetworkX directed graph
-        """
-        G = nx.DiGraph()
-        
-        # Add nodes
-        for node in self.graph_data.nodes:
-            G.add_node(
-                node.id, 
-                label=node.label, 
-                type=node.type, 
-                data=node.data
-            )
-        
-        # Add edges
-        for edge in self.graph_data.edges:
-            G.add_edge(
-                edge.source, 
-                edge.target, 
-                type=edge.type, 
-                data=edge.data
-            )
-        
-        return G
-    
     def _get_children(self, node_id: str) -> List[Any]:
         """
         Get all nodes directly contained by the given node.
@@ -609,3 +406,4 @@ class TerminalRenderer:
             if node.id == node_id:
                 return node
         return None 
+    
