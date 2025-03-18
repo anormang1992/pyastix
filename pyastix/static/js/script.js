@@ -2118,21 +2118,20 @@ function getSourceCode(nodeId) {
         .then(data => {
             // Get the code display element
             const codeElement = document.getElementById('element-code');
+            const diffView = document.getElementById('diff-view');
+            const codeContainer = document.getElementById('element-code-container');
 
-            if (diffMode && data.unified_diff) {
+            // First, reset both views to ensure a clean state
+            diffView.classList.remove('active');
+            codeContainer.classList.remove('hidden');
+            diffView.innerHTML = '';
+
+            if (diffMode && data.unified_diff && data.unified_diff.trim()) {
                 // Show diff view if we have diff data
-                const diffView = document.getElementById('diff-view');
-                const codeContainer = document.getElementById('element-code-container');
-                
                 try {
                     // Check if Diff2Html is available
                     if (typeof Diff2Html === 'undefined') {
                         throw new Error('Diff2Html library not loaded');
-                    }
-                    
-                    // Make sure we have non-empty diff content
-                    if (!data.unified_diff.trim()) {
-                        throw new Error('Empty diff content');
                     }
                     
                     // If the diff doesn't start with 'diff --git', add a simple header
@@ -2185,17 +2184,7 @@ function getSourceCode(nodeId) {
                     codeElement.parentNode.appendChild(errorDiv);
                 }
             } else {
-                // Standard code view
-                if (diffMode) {
-                    // Reset the view state if we're in diff mode but no diff for this node
-                    const diffView = document.getElementById('diff-view');
-                    const codeContainer = document.getElementById('element-code-container');
-                    
-                    diffView.classList.remove('active');
-                    diffView.innerHTML = '';
-                    codeContainer.classList.remove('hidden');
-                }
-                
+                // Standard code view for nodes without diff data
                 // Display the code
                 codeElement.textContent = data.code || "// No code available";
                 hljs.highlightElement(codeElement);

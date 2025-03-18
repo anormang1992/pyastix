@@ -36,7 +36,8 @@ def main(project_path, port, browser, module, terminal, diff):
     
     # Check for mutual exclusivity of terminal and diff flags
     if terminal and diff:
-        click.echo("Error: --terminal and --diff flags cannot be used together.")
+        click.echo("Error: --terminal and --diff flags cannot be used together. Wanna see the diff in the terminal? \
+                   I hear git is great 😛")
         sys.exit(1)
     
     # Check for git if diff mode is enabled
