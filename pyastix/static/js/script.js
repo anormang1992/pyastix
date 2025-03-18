@@ -2,9 +2,9 @@
 const CONFIG = {
     // Layout and simulation
     defaultLinkDistance: 100,
-    defaultChargeStrength: -150,
-    moduleChargeStrength: -700,
-    defaultCollideRadius: 60,
+    defaultChargeStrength: -120, // Reduced from -150 to allow closer positioning
+    moduleChargeStrength: -400, // Reduced from -700 to allow closer positioning
+    defaultCollideRadius: 40, // Reduced from 60 to allow closer positioning
     linkStrength: {
         contains: 0.7,
         calls: 0.3,
@@ -579,23 +579,39 @@ function initializeGraph() {
         }))
         .force('charge', d3.forceManyBody().strength(d => {
             // Apply stronger repulsion for modules and classes
-            if (d.type === 'module') return CONFIG.moduleChargeStrength;
-            if (d.type === 'class') return CONFIG.moduleChargeStrength * 0.6;
-            return CONFIG.defaultChargeStrength;
+            // Scale charge force with link distance to allow closer positioning when distance is small
+            const distanceFactor = linkDistance / CONFIG.defaultLinkDistance;
+            
+            let baseCharge;
+            if (d.type === 'module') {
+                baseCharge = CONFIG.moduleChargeStrength;
+            } else if (d.type === 'class') {
+                baseCharge = CONFIG.moduleChargeStrength * 0.6;
+            } else {
+                baseCharge = CONFIG.defaultChargeStrength;
+            }
+            
+            // Apply distance-based scaling factor, but keep minimum repulsion to prevent overlap
+            return baseCharge * Math.min(1.2, Math.max(0.5, distanceFactor));
         }))
         .force('center', d3.forceCenter(
             graphContainer.clientWidth / 2,
             graphContainer.clientHeight / 2
         ).strength(CONFIG.centerForceStrength))
         .force('collide', d3.forceCollide(d => {
-            // Enhanced collision radius based on node type
+            // Enhanced collision radius based on node type and proportional to link distance
+            const baseRadius = CONFIG.nodeRadii[d.type] || 8; // Use actual node radius as base
             const radiusMultiplier = {
-                'module': 1.8,
-                'class': 1.5,
-                'method': 1.2,
-                'function': 1.2
+                'module': 1.5, // Reduced from 1.8
+                'class': 1.3, // Reduced from 1.5
+                'method': 1.1, // Reduced from 1.2
+                'function': 1.1 // Reduced from 1.2
             };
-            return CONFIG.defaultCollideRadius * (radiusMultiplier[d.type] || 1);
+            
+            // Make collision radius somewhat proportional to link distance
+            // This helps nodes come closer when link distance is reduced
+            const distanceFactor = linkDistance / CONFIG.defaultLinkDistance;
+            return baseRadius * (radiusMultiplier[d.type] || 1) * Math.max(0.8, distanceFactor);
         }).iterations(2)) // More iterations for better collision resolution
         .force('x', d3.forceX().strength(0.01)) // Gentle force toward center x
         .force('y', d3.forceY().strength(0.01)); // Gentle force toward center y
@@ -1743,8 +1759,12 @@ function updateLinkDistance(newDistance) {
             });
     }
     
-    // Use higher alpha to allow more movement for the adjustment to take effect
-    simulation.alpha(0.5).restart();
+    // Update charge and collision forces to reflect new link distance
+    simulation.force('charge').initialize(simulation.nodes());
+    simulation.force('collide').initialize(simulation.nodes());
+    
+    // Restart simulation with a stronger alpha to ensure changes take effect
+    simulation.alpha(0.3).restart();
 }
 
 // Apply initial positions to improve layout with crowsfoot pattern
