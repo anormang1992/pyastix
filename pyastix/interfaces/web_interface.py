@@ -4,8 +4,12 @@ Web interface module for visualizing the dependency graph.
 import logging
 import webbrowser
 import sqlite3
+import os
+import sys
+import time
+import json
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Set
 import threading
 from flask import Flask, render_template, jsonify, request, send_from_directory
 
@@ -25,12 +29,16 @@ class WebServer:
         graph_data (DependencyGraph): The dependency graph to visualize
         project_path (Path): Root path of the analyzed project
         port (int): Port to run the web server on
+        focus_module (Optional[str]): Module to focus on
+        diff_mode (bool): Whether to show git diff information
     """
-    def __init__(self, graph_data: DependencyGraph, project_path: Path, port: int = 8000, focus_module: Optional[str] = None):
+    def __init__(self, graph_data: DependencyGraph, project_path: Path, port: int = 8000, 
+                 focus_module: Optional[str] = None, diff_mode: bool = False):
         self.graph_data = graph_data
         self.project_path = project_path
         self.port = port
         self.focus_module = focus_module
+        self.diff_mode = diff_mode
         
         # Find template and static directories relative to package root
         package_dir = Path(__file__).parent.parent  # Go up one level to pyastix root
@@ -151,12 +159,15 @@ class WebServer:
         """
         @self.app.route('/')
         def index():
-            return render_template('index.html')
+            return render_template('index.html', diff_mode=self.diff_mode)
         
         @self.app.route('/api/graph')
         def graph():
             # Include focus module in the response if specified
             response_data = self.graph_data.to_dict()
+            
+            # Add diff_mode flag to the response
+            response_data["diff_mode"] = self.diff_mode
             
             # Add saved node states if they exist
             saved_states = self._get_saved_node_states()
@@ -249,43 +260,58 @@ class WebServer:
         
         @self.app.route('/api/source')
         def source_code():
-            element_id = request.args.get('id')
-            if not element_id:
-                return jsonify({"error": "No element ID provided"}), 400
+            """Get source code for a code element."""
+            node_id = request.args.get('id')
+            if not node_id:
+                return jsonify({"error": "Missing node id parameter"}), 400
             
-            codebase_structure = CodebaseStructure(self.project_path)
+            elements = {}
+            all_elements = self.graph_data.nodes
+            for node in all_elements:
+                elements[node.id] = node.data
             
-            # Since graph_data doesn't have direct access to CodebaseStructure methods,
-            # we'll have to extract source code from original files
-            # This is simplified; in a real implementation, you'd pass the full CodebaseStructure
+            if node_id not in elements:
+                return jsonify({"error": f"Node {node_id} not found"}), 404
             
-            # Find the node
-            node = None
-            for n in self.graph_data.nodes:
-                if n.id == element_id:
-                    node = n
-                    break
+            node_data = elements[node_id]
             
-            if not node:
-                return jsonify({"error": "Element not found"}), 404
+            # Adjust path relative to project root if needed
+            file_path = node_data.get("path", "")
+            
+            # If we have line numbers, read just those lines
+            line_start = node_data.get("lineno", 1)
+            line_end = node_data.get("end_lineno", line_start)
             
             try:
-                path = node.data["path"]
-                lineno = node.data["lineno"]
-                end_lineno = node.data["end_lineno"]
-                
-                with open(path, 'r') as f:
+                with open(file_path, 'r') as f:
                     lines = f.readlines()
                 
-                source = ''.join(lines[lineno-1:end_lineno])
+                # Get the requested lines (convert from 1-indexed to 0-indexed)
+                start_idx = max(0, line_start - 1)
+                end_idx = min(len(lines), line_end)
+                
+                code = ''.join(lines[start_idx:end_idx])
+                
+                # Get diff information in diff mode
+                diff_info = None
+                if self.diff_mode and "diff_info" in node_data:
+                    diff_info = node_data["diff_info"]
+                    
+                unified_diff = None
+                if self.diff_mode and "unified_diff" in node_data and node_data["unified_diff"]:
+                    unified_diff = node_data["unified_diff"]
+                
                 return jsonify({
-                    "source": source,
-                    "path": path,
-                    "lineno": lineno,
-                    "end_lineno": end_lineno
+                    "code": code,
+                    "path": file_path,
+                    "start_line": line_start,
+                    "end_line": line_end,
+                    "diff_info": diff_info,
+                    "unified_diff": unified_diff
                 })
+            
             except Exception as e:
-                return jsonify({"error": str(e)}), 500
+                return jsonify({"error": f"Failed to read file: {str(e)}"}), 500
         
         @self.app.route('/api/search')
         def search():

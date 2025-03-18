@@ -26,6 +26,14 @@ class CodeElement:
         self.complexity_rating = "Unknown"
         self.complexity_class = ""
         
+        # Git diff information
+        self.diff_info = {
+            "added_lines": 0,
+            "removed_lines": 0,
+            "change_percent": 0
+        }
+        self.unified_diff = ""  # Will contain the unified diff text for this element
+        
     def __repr__(self):
         return f"{self.__class__.__name__}(name='{self.name}', path='{self.path}')"
 

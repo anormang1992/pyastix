@@ -19,7 +19,8 @@ from pyastix.interfaces.terminal_interface import TerminalRenderer
 @click.option('--browser/--no-browser', default=True, help='Open in browser automatically.')
 @click.option('--module', '-m', help='Target a specific module to visualize. Only this module and its direct dependencies will be shown.')
 @click.option('--terminal', '-t', is_flag=True, help='Render graph in the terminal instead of starting a web server.')
-def main(project_path, port, browser, module, terminal):
+@click.option('--diff', '-d', is_flag=True, help='Show git diff information in the visualization (requires git).')
+def main(project_path, port, browser, module, terminal, diff):
     """
     Generate and visualize a dependency graph for a Python project.
     
@@ -33,9 +34,22 @@ def main(project_path, port, browser, module, terminal):
     project_path = Path(project_path).resolve()
     click.echo(f"Analyzing project at: {project_path}")
     
+    # Check for mutual exclusivity of terminal and diff flags
+    if terminal and diff:
+        click.echo("Error: --terminal and --diff flags cannot be used together.")
+        sys.exit(1)
+    
+    # Check for git if diff mode is enabled
+    if diff:
+        git_dir = project_path / ".git"
+        if not git_dir.exists():
+            click.echo(f"Error: --diff mode requires a git repository. No .git directory found in {project_path}")
+            sys.exit(1)
+        click.echo("Git repository detected. Diff mode enabled.")
+    
     # Parse the codebase
     click.echo("Parsing codebase...")
-    parser = CodebaseParser(project_path)
+    parser = CodebaseParser(project_path, diff_mode=diff)
     codebase_structure = parser.parse()
     
     # Generate the graph
@@ -56,7 +70,7 @@ def main(project_path, port, browser, module, terminal):
     else:
         # Start the web server
         click.echo(f"Starting web server on port {port}...")
-        server = WebServer(graph_data, project_path, port=port, focus_module=module if module else None)
+        server = WebServer(graph_data, project_path, port=port, focus_module=module if module else None, diff_mode=diff)
         
         # Open browser if requested
         if browser:

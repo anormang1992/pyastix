@@ -402,21 +402,30 @@ class DependencyGraphGenerator:
     
     def _add_node(self, id: str, label: str, type: str, data: Dict[str, Any]) -> None:
         """
-        Add a node to the graph.
+        Add a node to the graph if it doesn't already exist.
         
         Args:
             id (str): Unique identifier for the node
             label (str): Display label for the node
-            type (str): Type of the node
+            type (str): Type of the node (module, class, function, method)
             data (Dict): Additional data for the node
         """
         if id in self.node_ids:
             return
         
-        self.node_ids.add(id)
+        # Copy diff information from the code element if it exists
+        element = None
+        all_elements = self.codebase_structure.get_all_code_elements()
+        if id in all_elements:
+            element = all_elements[id]
+            if hasattr(element, 'diff_info'):
+                data['diff_info'] = element.diff_info
+            if hasattr(element, 'unified_diff'):
+                data['unified_diff'] = element.unified_diff
+        
         node = GraphNode(id, label, type, data)
         self.nodes.append(node)
-        self.node_map[id] = node
+        self.node_ids.add(id)
     
     def _add_edge(self, id: str, source: str, target: str, type: str, data: Dict[str, Any]) -> None:
         """

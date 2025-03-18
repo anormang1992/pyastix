@@ -858,3 +858,167 @@ svg {
     line-height: 1.4;
 }
 
+/* Diff mode styles */
+.diff-mode-indicator {
+    display: inline-block;
+    background-color: #e74c3c;
+    color: white;
+    font-size: 0.8em;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 8px;
+    vertical-align: middle;
+}
+
+.diff-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.diff-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.diff-badge {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+}
+
+.diff-badge.added {
+    background-color: #28a745;
+}
+
+.diff-badge.removed {
+    background-color: #dc3545;
+}
+
+.diff-badge.mixed {
+    background: linear-gradient(135deg, #28a745 0%, #28a745 50%, #dc3545 50%, #dc3545 100%);
+}
+
+.diff-stats .stat-value.added {
+    color: #28a745;
+    font-weight: bold;
+}
+
+.diff-stats .stat-value.removed {
+    color: #dc3545;
+    font-weight: bold;
+}
+
+/* Node diff indicator (half-moon gauge) */
+.node .diff-indicator {
+    display: none;
+}
+
+.node.has-diff .diff-indicator {
+    display: block;
+}
+
+.node .diff-indicator {
+    fill: none;
+    stroke-width: 3px;
+}
+
+.node .diff-indicator.added {
+    stroke: #28a745;
+}
+
+.node .diff-indicator.removed {
+    stroke: #dc3545;
+}
+
+.node .diff-indicator.mixed {
+    stroke: url(#diff-gradient);
+}
+
+/* Diff view styling */
+.diff-view {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    overflow: auto;
+    display: none;
+    width: 100%;
+    height: 100%;
+    max-height: 70vh;
+    background-color: white;
+    border: 1px solid #e0e0e0;
+    padding: 10px;
+    box-sizing: border-box;
+}
+
+.diff-view.active {
+    display: block;
+}
+
+/* Override any problematic diff2html styles */
+.diff-view .d2h-wrapper {
+    width: 100% !important;
+    margin: 0 !important;
+}
+
+.diff-view .d2h-file-wrapper {
+    border: none !important;
+    margin-bottom: 0 !important;
+}
+
+.diff-view .d2h-file-header {
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+.diff-view .d2h-diff-tbody {
+    width: 100% !important;
+}
+
+#element-code-container {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+#element-code-container.hidden {
+    display: none;
+}
+
+/* Override diff2html styling for removed lines */
+.d2h-del {
+    background-color: #ffdce0 !important;  /* Light red background */
+}
+
+.d2h-deletion {
+    background-color: #ffdce0 !important;  /* Light red background */
+}
+
+.d2h-code-linenumber.d2h-del {
+    background-color: #ffb6ba !important;  /* Slightly darker red for line numbers */
+}
+
+.d2h-code-line.d2h-del {
+    background-color: #ffdce0 !important;  /* Light red background */
+}
+
+/* Make sure the actual deletion marker is a more visible red */
+.d2h-deletion .d2h-code-line-prefix {
+    background-color: #ff9999 !important;  /* Darker red for the - prefix */
+}
+
+/* Hide diff headers */
+.diff-view .d2h-file-header,
+.diff-view .d2h-file-name,
+.diff-view .d2h-file-stats {
+    display: none !important;
+}
+
+/* Add more top padding to compensate for removed header */
+.diff-view .d2h-diff-tbody {
+    padding-top: 10px !important;
+}
+

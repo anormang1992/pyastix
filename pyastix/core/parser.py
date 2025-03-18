@@ -8,6 +8,7 @@ import astroid
 from pathlib import Path
 import re
 import fnmatch
+import subprocess
 from typing import Dict, List, Set, Tuple, Any, Optional
 
 from pyastix.models.code_element import CodeElement, Module, Class, Function, Method, Import
@@ -172,12 +173,129 @@ class CodebaseParser:
     
     Args:
         project_path (Path): Path to the project to analyze
+        diff_mode (bool): Whether to include git diff information
     """
-    def __init__(self, project_path: Path):
+    def __init__(self, project_path: Path, diff_mode: bool = False):
         self.project_path = project_path
+        self.diff_mode = diff_mode
         self.structure = CodebaseStructure(project_path)
         self.visited_files: Set[str] = set()
         self.ignore_patterns = IgnorePatternList(project_path)
+        self.git_diffs = {}
+        
+        if self.diff_mode:
+            self._load_git_diffs()
+        
+    def _load_git_diffs(self):
+        """
+        Load git diff information for all Python files in the project.
+        
+        This method collects line-by-line diff information from git and organizes
+        it by file and line number for easy access during parsing.
+        """
+        try:
+            # Get the output of git diff for all Python files
+            result = subprocess.run(
+                ["git", "-C", str(self.project_path), "diff", "--unified=0", "*.py"],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            
+            if result.returncode != 0:
+                print(f"Warning: Git diff command failed with error: {result.stderr}")
+                return
+            
+            # Parse the diff output
+            current_file = None
+            current_hunk = None
+            
+            for line in result.stdout.splitlines():
+                # New file header
+                if line.startswith("--- a/") or line.startswith("--- /dev/null"):
+                    current_file = None
+                    continue
+                
+                if line.startswith("+++ b/"):
+                    file_path = line[6:]  # Remove "+++ b/" prefix
+                    abs_path = self.project_path / file_path
+                    current_file = str(abs_path)
+                    if current_file not in self.git_diffs:
+                        self.git_diffs[current_file] = {
+                            "added_lines": set(),
+                            "removed_lines": set(),
+                            "added_count": 0,
+                            "removed_count": 0
+                        }
+                    continue
+                
+                # Hunk header
+                if line.startswith("@@"):
+                    match = re.search(r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))?", line)
+                    if match:
+                        old_start = int(match.group(1))
+                        old_count = int(match.group(2) or 1)
+                        new_start = int(match.group(3))
+                        new_count = int(match.group(4) or 1)
+                        
+                        current_hunk = {
+                            "old_start": old_start,
+                            "old_count": old_count,
+                            "new_start": new_start,
+                            "new_count": new_count,
+                            "old_line": old_start,
+                            "new_line": new_start
+                        }
+                    continue
+                
+                # Line content
+                if current_file and current_hunk:
+                    if line.startswith("+"):
+                        self.git_diffs[current_file]["added_lines"].add(current_hunk["new_line"])
+                        self.git_diffs[current_file]["added_count"] += 1
+                        current_hunk["new_line"] += 1
+                    elif line.startswith("-"):
+                        self.git_diffs[current_file]["removed_lines"].add(current_hunk["old_line"])
+                        self.git_diffs[current_file]["removed_count"] += 1
+                        current_hunk["old_line"] += 1
+                    else:  # Context line
+                        current_hunk["old_line"] += 1
+                        current_hunk["new_line"] += 1
+        
+        except Exception as e:
+            print(f"Warning: Failed to load git diffs: {e}")
+
+    def _add_diff_info_to_code_element(self, element: CodeElement, file_path: str):
+        """
+        Add git diff information to a code element.
+        
+        Args:
+            element (CodeElement): The code element to add diff info to
+            file_path (str): Path to the file containing the element
+        """
+        if not self.diff_mode or file_path not in self.git_diffs:
+            element.diff_info = {"added_lines": 0, "removed_lines": 0, "change_percent": 0}
+            return
+        
+        diff_info = self.git_diffs[file_path]
+        start_line = element.lineno
+        end_line = element.end_lineno
+        
+        # Count the added and removed lines that fall within this element's range
+        added_in_element = sum(1 for line in diff_info["added_lines"] if start_line <= line <= end_line)
+        removed_in_element = sum(1 for line in diff_info["removed_lines"] if start_line <= line <= end_line)
+        
+        # Calculate the percentage of the element that has been changed
+        element_line_count = end_line - start_line + 1
+        total_changes = added_in_element + removed_in_element
+        change_percent = (total_changes / element_line_count * 100) if element_line_count > 0 else 0
+        
+        # Store the diff information in the element
+        element.diff_info = {
+            "added_lines": added_in_element,
+            "removed_lines": removed_in_element,
+            "change_percent": min(100, change_percent)
+        }
         
     def parse(self) -> CodebaseStructure:
         """
@@ -209,6 +327,10 @@ class CodebaseParser:
         
         # Process relationships and calls after all files are parsed
         self._process_relationships()
+        
+        # After parsing, get the unified diff for each element if in diff mode
+        if self.diff_mode:
+            self._add_git_unified_diffs()
         
         return self.structure
     
@@ -252,6 +374,10 @@ class CodebaseParser:
             
             # Add to structure
             self.structure.add_module(module)
+            
+            # Add the diff information to the module
+            if self.diff_mode:
+                self._add_diff_info_to_code_element(module, str(file_path))
             
         except Exception as e:
             print(f"Error parsing {file_path}: {e}")
@@ -326,6 +452,10 @@ class CodebaseParser:
                 self._parse_method(cls, child, function_complexities)
             elif isinstance(child, astroid.AssignName):
                 cls.attributes.append(child.name)
+        
+        # Add the diff information to the class
+        if self.diff_mode:
+            self._add_diff_info_to_code_element(cls, module.path)
     
     def _parse_function(self, module: Module, node: astroid.FunctionDef, function_complexities: Dict[Tuple[int, int], int]) -> None:
         """
@@ -348,6 +478,10 @@ class CodebaseParser:
         
         # Set complexity
         self._set_complexity(func, function_complexities)
+        
+        # Add the diff information to the function
+        if self.diff_mode:
+            self._add_diff_info_to_code_element(func, module.path)
     
     def _parse_method(self, cls: Class, node: astroid.FunctionDef, function_complexities: Dict[Tuple[int, int], int]) -> None:
         """
@@ -370,6 +504,10 @@ class CodebaseParser:
         
         # Set complexity
         self._set_complexity(method, function_complexities)
+        
+        # Add the diff information to the method
+        if self.diff_mode:
+            self._add_diff_info_to_code_element(method, cls.path)
     
     def _find_calls(self, func: Function, node: astroid.FunctionDef) -> None:
         """
@@ -445,3 +583,122 @@ class CodebaseParser:
         # This method would resolve imports, connect calls to their targets, etc.
         # For simplicity, we'll leave this as a placeholder for now
         pass 
+
+    def _add_git_unified_diffs(self):
+        """
+        Get and store unified diff content for each code element.
+        
+        This method gets the complete unified diff for each modified file and
+        extracts the relevant part for each code element based on line numbers.
+        """
+        try:
+            # Get unified diff with context for all Python files
+            result = subprocess.run(
+                ["git", "-C", str(self.project_path), "diff", "*.py"],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            
+            if result.returncode != 0:
+                print(f"Warning: Git unified diff command failed with error: {result.stderr}")
+                return
+            
+            # Parse the diff output to get the complete diff for each file
+            current_file = None
+            file_diffs = {}
+            file_diff_lines = []
+            
+            for line in result.stdout.splitlines():
+                if line.startswith("diff --git"):
+                    # Store the previous file's diff if it exists
+                    if current_file:
+                        file_diffs[current_file] = file_diff_lines
+                    
+                    # Start a new file
+                    current_file = None
+                    file_diff_lines = [line]
+                elif line.startswith("+++ b/"):
+                    file_diff_lines.append(line)
+                    file_path = line[6:]  # Remove "+++ b/" prefix
+                    abs_path = str(self.project_path / file_path)
+                    current_file = abs_path
+                else:
+                    if current_file:  # Only append if we've identified a file
+                        file_diff_lines.append(line)
+            
+            # Store the last file's diff
+            if current_file:
+                file_diffs[current_file] = file_diff_lines
+            
+            # For each element in the codebase, find its diff content
+            elements = self.structure.get_all_code_elements()
+            for element_id, element in elements.items():
+                if getattr(element, "diff_info", {}).get("added_lines", 0) > 0 or \
+                   getattr(element, "diff_info", {}).get("removed_lines", 0) > 0:
+                    # This element has changes, store the unified diff
+                    element.unified_diff = self._extract_element_diff(
+                        element, 
+                        file_diffs.get(element.path, [])
+                    )
+        
+        except Exception as e:
+            print(f"Warning: Failed to add unified diffs: {e}")
+    
+    def _extract_element_diff(self, element: CodeElement, file_diff_lines: List[str]) -> str:
+        """
+        Extract the diff section that applies to a specific code element.
+        
+        Args:
+            element (CodeElement): The code element to get diff for
+            file_diff_lines (List[str]): Complete diff for the file
+            
+        Returns:
+            str: The unified diff for the element, or empty string if no diff
+        """
+        if not file_diff_lines:
+            return ""
+        
+        start_line = element.lineno
+        end_line = element.end_lineno
+        
+        # Find hunks that overlap with the element's lines
+        relevant_lines = []
+        in_hunk = False
+        current_hunk_header = None
+        line_offset = 0
+        
+        for line in file_diff_lines:
+            # Hunk header
+            if line.startswith("@@"):
+                match = re.search(r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))?", line)
+                if match:
+                    old_start = int(match.group(1))
+                    old_count = int(match.group(2) or 1)
+                    
+                    # Check if this hunk overlaps with the element
+                    old_end = old_start + old_count - 1
+                    if (old_start <= end_line and old_end >= start_line):
+                        in_hunk = True
+                        current_hunk_header = line
+                        line_offset = 0
+                    else:
+                        in_hunk = False
+            
+            elif in_hunk:
+                if line.startswith(' '):  # Context line
+                    line_offset += 1
+                elif line.startswith('+'):  # Added line
+                    line_offset += 1
+                elif line.startswith('-'):  # Removed line
+                    pass  # No increment for removed lines in new file
+                
+                # The first time we find a relevant hunk, add the header
+                if not relevant_lines and line_offset > 0:
+                    relevant_lines.append(current_hunk_header)
+                
+                # Add the line if it's in our element's range
+                if in_hunk:
+                    relevant_lines.append(line)
+        
+        return "\n".join(relevant_lines) 

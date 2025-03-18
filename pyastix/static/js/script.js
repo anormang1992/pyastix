@@ -143,6 +143,9 @@ let selectionPoints = [];
 let selectionPolygon = null;
 let hasLoadedSavedState = false;
 
+// Add a global variable to track diff mode
+let diffMode = false;
+
 // Initialize the visualization
 window.addEventListener('DOMContentLoaded', () => {
     // Fetch the graph data
@@ -504,11 +507,38 @@ function initializeGraph() {
     // Clear previous graph
     graphContainer.innerHTML = '';
     
-    // Create SVG element
+    // Check if we're in diff mode
+    diffMode = graphData.diff_mode || false;
+    
+    // Set up SVG
     svg = d3.select('#graph-container')
         .append('svg')
         .attr('width', '100%')
         .attr('height', '100%');
+    
+    // Add gradient for mixed diff indicators
+    if (diffMode) {
+        const defs = svg.append('defs');
+        const gradient = defs.append('linearGradient')
+            .attr('id', 'diff-gradient')
+            .attr('gradientTransform', 'rotate(135)');
+            
+        gradient.append('stop')
+            .attr('offset', '0%')
+            .attr('stop-color', '#28a745');
+            
+        gradient.append('stop')
+            .attr('offset', '50%')
+            .attr('stop-color', '#28a745');
+            
+        gradient.append('stop')
+            .attr('offset', '50%')
+            .attr('stop-color', '#dc3545');
+            
+        gradient.append('stop')
+            .attr('offset', '100%')
+            .attr('stop-color', '#dc3545');
+    }
     
     // Create container for zoom/pan
     const g = svg.append('g');
@@ -599,7 +629,14 @@ function initializeGraph() {
         .data(graphData.nodes)
         .enter()
         .append('g')
-        .attr('class', d => `node ${d.type}`)
+        .attr('class', d => {
+            let classes = `node ${d.type}`;
+            if (diffMode && d.data.diff_info && 
+                (d.data.diff_info.added_lines > 0 || d.data.diff_info.removed_lines > 0)) {
+                classes += ' has-diff';
+            }
+            return classes;
+        })
         .style('display', d => visibleTypes[d.type] ? null : 'none')
         .call(d3.drag()
             .on('start', dragStarted)
@@ -611,7 +648,31 @@ function initializeGraph() {
     
     // Add circles to nodes
     nodeGroups.append('circle')
-        .attr('r', d => CONFIG.nodeRadii[d.type]);
+        .attr('r', d => CONFIG.nodeRadii[d.type] || 5);
+    
+    // Add diff indicators to nodes if in diff mode
+    if (diffMode) {
+        nodeGroups.append('path')
+            .attr('class', d => {
+                const diffInfo = d.data.diff_info || {};
+                const added = diffInfo.added_lines || 0;
+                const removed = diffInfo.removed_lines || 0;
+                
+                if (added > 0 && removed === 0) return 'diff-indicator added';
+                if (added === 0 && removed > 0) return 'diff-indicator removed';
+                if (added > 0 && removed > 0) return 'diff-indicator mixed';
+                return 'diff-indicator';
+            })
+            .attr('d', d => {
+                const r = CONFIG.nodeRadii[d.type] || 5;
+                // Create a half-moon arc
+                return `M ${-r} 0 A ${r} ${r} 0 0 1 ${r} 0`;
+            })
+            .attr('transform', d => {
+                const r = CONFIG.nodeRadii[d.type] || 5;
+                return `translate(0, ${-r})`;
+            });
+    }
     
     // Add labels to nodes
     nodeGroups.append('text')
@@ -731,17 +792,30 @@ function updateNodeStats(node) {
         return;
     }
     
-    // Update line range
-    const startLine = node.data.lineno || '-';
-    const endLine = node.data.end_lineno || '-';
+    // Set the node title
+    elementName.textContent = node.label;
+    
+    // Set the type
+    elementType.textContent = capitalizeFirstLetter(node.type);
+    
+    // Set the path
+    const path = node.data.path || "";
+    elementPath.textContent = path;
+    
+    // Set the line range
+    const startLine = node.data.lineno || "-";
+    const endLine = node.data.end_lineno || startLine;
     lineRange.textContent = `${startLine} - ${endLine}`;
     
-    // Calculate line count
-    if (startLine !== '-' && endLine !== '-') {
-        const count = endLine - startLine + 1;
-        lineCount.textContent = count;
-    } else {
-        lineCount.textContent = '-';
+    // Calculate lines of code
+    const lineCount = endLine - startLine + 1;
+    document.getElementById('line-count').textContent = lineCount;
+    
+    // Update diff statistics if in diff mode
+    if (diffMode) {
+        const diffInfo = node.data.diff_info || { added_lines: 0, removed_lines: 0 };
+        document.getElementById('lines-added').textContent = diffInfo.added_lines || 0;
+        document.getElementById('lines-removed').textContent = diffInfo.removed_lines || 0;
     }
     
     // Calculate incoming calls (where this node is the target)
@@ -953,8 +1027,8 @@ function dragging(event, d) {
         });
     } else {
         // Regular single node drag
-        d.fx = event.x;
-        d.fy = event.y;
+    d.fx = event.x;
+    d.fy = event.y;
     }
 }
 
@@ -990,17 +1064,17 @@ function dragEnded(event, d) {
         simulation.alpha(0.5).restart();
     } else {
         // Regular single node drag end
-        if (!d._wasFixed && !layoutFixed) {
-            d.fx = null;
-            d.fy = null;
+    if (!d._wasFixed && !layoutFixed) {
+    d.fx = null;
+    d.fy = null;
             d.fixed = false;
-            // Restart with higher alpha for more natural movement when released
-            simulation.alpha(0.5).restart();
-        } else {
+        // Restart with higher alpha for more natural movement when released
+        simulation.alpha(0.5).restart();
+    } else {
             // Node remains fixed
             d.fixed = true;
-            // Fixed nodes get smaller alpha adjustment
-            simulation.alpha(0.1).restart();
+        // Fixed nodes get smaller alpha adjustment
+        simulation.alpha(0.1).restart();
         }
     }
     
@@ -1111,19 +1185,7 @@ function nodeClicked(event, node) {
     updateNodeStats(node);
     
     // Fetch source code
-    fetch(`/api/source?id=${encodeURIComponent(node.id)}`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.error) {
-                elementCode.textContent = `// Error loading source code: ${data.error}`;
-            } else {
-                elementCode.textContent = data.source;
-                hljs.highlightElement(elementCode);
-            }
-        })
-        .catch(error => {
-            elementCode.textContent = `// Error loading source code: ${error}`;
-        });
+    getSourceCode(node.id);
 }
 
 // Search for elements
@@ -1203,7 +1265,7 @@ function displaySearchResults(results, query) {
             focusOnNode(result.id);
             searchDropdown.classList.remove('active');
         });
-
+        
         item_container.appendChild(item);
         searchDropdown.appendChild(item_container);
     });
@@ -1516,7 +1578,7 @@ function isPointInPolygon(x, y, polygon) {
         const xj = polygon[j].x, yj = polygon[j].y;
         
         const intersect = ((yi > y) != (yj > y)) && 
-                        (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+                         (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
         if (intersect) inside = !inside;
     }
     return inside;
@@ -1989,5 +2051,120 @@ function performSave(nodeStates) {
         .catch(error => {
             console.error('Error saving node states:', error);
             alert("Error saving layout. Please try again.");
+        });
+}
+
+// Get source code for a node
+function getSourceCode(nodeId) {
+    if (!nodeId) return;
+    
+    fetch(`/api/source?id=${encodeURIComponent(nodeId)}`)
+        .then(response => response.json())
+        .then(data => {
+            // Get the code display element
+            const codeElement = document.getElementById('element-code');
+            
+            // Debug: Log what we received from the API
+            console.log("API response for source code:", data);
+            
+            if (diffMode && data.unified_diff) {
+                // Show diff view if we have diff data
+                const diffView = document.getElementById('diff-view');
+                const codeContainer = document.getElementById('element-code-container');
+                
+                try {
+                    // Check if Diff2Html is available
+                    if (typeof Diff2Html === 'undefined') {
+                        throw new Error('Diff2Html library not loaded');
+                    }
+                    
+                    // Log the diff data for debugging
+                    console.log("Rendering diff content:", data.unified_diff);
+                    
+                    // Make sure we have non-empty diff content
+                    if (!data.unified_diff.trim()) {
+                        throw new Error('Empty diff content');
+                    }
+                    
+                    // If the diff doesn't start with 'diff --git', add a simple header
+                    let diffContent = data.unified_diff;
+                    if (!diffContent.startsWith('diff --git')) {
+                        const filePath = data.path || 'unknown_file.py';
+                        const fileName = filePath.split('/').pop();
+                        
+                        // Add standard git diff header
+                        diffContent = [
+                            `diff --git a/${fileName} b/${fileName}`,
+                            `--- a/${fileName}`,
+                            `+++ b/${fileName}`,
+                            diffContent
+                        ].join('\n');
+                        
+                        console.log("Added diff header to content:", diffContent);
+                    }
+                    
+                    // Configure diff2html options
+                    const configuration = {
+                        drawFileList: false,
+                        matching: 'lines',
+                        outputFormat: 'line-by-line',
+                        highlight: true
+                    };
+                    
+                    // Render the diff using the correct API
+                    const diffHtml = Diff2Html.html(diffContent, configuration);
+                    
+                    // Log the generated HTML for debugging
+                    console.log("Generated diff HTML:", diffHtml.length > 100 ? diffHtml.substring(0, 100) + "..." : diffHtml);
+                    
+                    // Set the innerHTML
+                    diffView.innerHTML = diffHtml;
+                    
+                    // Ensure the diff view is visible and properly styled
+                    diffView.style.display = 'block';
+                    diffView.style.maxHeight = '70vh';
+                    diffView.style.overflow = 'auto';
+                    
+                    // Show diff view, hide code view
+                    diffView.classList.add('active');
+                    codeContainer.classList.add('hidden');
+                    
+                    console.log("Diff view displayed, code container hidden");
+                } catch (err) {
+                    console.error('Error rendering diff:', err);
+                    // Show regular code view instead
+                    codeElement.textContent = data.code || "// No code available";
+                    hljs.highlightElement(codeElement);
+                    
+                    // Also append error message
+                    const errorDiv = document.createElement('div');
+                    errorDiv.style.color = 'red';
+                    errorDiv.textContent = `Error rendering diff: ${err.message}`;
+                    codeElement.parentNode.appendChild(errorDiv);
+                }
+            } else {
+                // Standard code view
+                if (diffMode) {
+                    // Reset the view state if we're in diff mode but no diff for this node
+                    const diffView = document.getElementById('diff-view');
+                    const codeContainer = document.getElementById('element-code-container');
+                    
+                    diffView.classList.remove('active');
+                    diffView.innerHTML = '';
+                    codeContainer.classList.remove('hidden');
+                    
+                    console.log("No diff data available for this node, showing regular code");
+                }
+                
+                // Display the code
+                codeElement.textContent = data.code || "// No code available";
+                hljs.highlightElement(codeElement);
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching source code:', error);
+            const codeElement = document.getElementById('element-code');
+            codeElement.textContent = `// Error fetching source code: ${error}`;
+            hljs.highlightElement(codeElement);
         });
 }

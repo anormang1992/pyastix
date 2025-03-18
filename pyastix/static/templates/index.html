@@ -3,15 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pyastix - Code Dependency Visualization</title>
+    <title>Pyastix - Code Dependency Visualization{% if diff_mode %} (Diff Mode){% endif %}</title>
     <link rel="stylesheet" href="/css/style.css">
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/github.min.css">
+    {% if diff_mode %}
+    <script src="https://cdn.jsdelivr.net/npm/diff2html@3.4.35/bundles/js/diff2html.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/diff2html@3.4.35/bundles/css/diff2html.min.css">
+    {% endif %}
 </head>
-<body>
+<body {% if diff_mode %}class="diff-mode"{% endif %}>
     <header>
-        <div class="logo">Pyastix</div>
+        <div class="logo">Pyastix{% if diff_mode %} <span class="diff-mode-indicator">Diff Mode</span>{% endif %}</div>
         <div class="search-container">
             <input type="text" id="search-input" placeholder="Search for modules, classes, methods...">
             <button id="search-button">Search</button>
@@ -220,6 +224,26 @@
                     </div>
                 </div>
             </div>
+
+            {% if diff_mode %}
+            <div class="panel-section">
+                <h3>Diff Information</h3>
+                <div class="diff-legend">
+                    <div class="diff-legend-item">
+                        <span class="diff-badge added"></span>
+                        <span class="diff-label">Added</span>
+                    </div>
+                    <div class="diff-legend-item">
+                        <span class="diff-badge removed"></span>
+                        <span class="diff-label">Removed</span>
+                    </div>
+                    <div class="diff-legend-item">
+                        <span class="diff-badge mixed"></span>
+                        <span class="diff-label">Mixed</span>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
         </div>
         
         <div class="content-area">
@@ -245,6 +269,18 @@
                             <span id="line-count" class="stat-value">-</span>
                         </div>
                     </div>
+                    {% if diff_mode %}
+                    <div class="stats-row diff-stats">
+                        <div class="stat-item">
+                            <span class="stat-label">Lines Added:</span>
+                            <span id="lines-added" class="stat-value added">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Lines Removed:</span>
+                            <span id="lines-removed" class="stat-value removed">-</span>
+                        </div>
+                    </div>
+                    {% endif %}
                     <div class="stats-row">
                         <div class="stat-item">
                             <span class="stat-label">Incoming Calls:</span>
@@ -277,12 +313,34 @@
                     </div>
                 </div>
                 <div class="code-container">
+                    {% if diff_mode %}
+                    <div id="diff-view" class="diff-view"></div>
+                    <div id="element-code-container">
+                        <pre><code id="element-code" class="python"></code></pre>
+                    </div>
+                    {% else %}
                     <pre><code id="element-code" class="python"></code></pre>
+                    {% endif %}
                 </div>
             </div>
         </div>
     </main>
 
+    <script>
+        // Pass diff mode flag to JavaScript
+        const DIFF_MODE = "{{ diff_mode|lower }}" === "true";
+        
+        // Check if the Diff2Html library is available when in diff mode
+        if (DIFF_MODE) {
+            window.addEventListener('DOMContentLoaded', () => {
+                if (typeof Diff2Html === 'undefined') {
+                    console.error('Diff2Html library is not loaded!');
+                } else {
+                    console.log('Diff2Html library loaded successfully:', Diff2Html);
+                }
+            });
+        }
+    </script>
     <script src="/js/script.js"></script>
 </body>
 </html>
