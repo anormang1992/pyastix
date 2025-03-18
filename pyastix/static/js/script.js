@@ -668,7 +668,7 @@ function initializeGraph() {
     
     // Add diff indicators to nodes if in diff mode
     if (diffMode) {
-        nodeGroups.append('path')
+        nodeGroups.append('rect')
             .attr('class', d => {
                 const diffInfo = d.data.diff_info || {};
                 const added = diffInfo.added_lines || 0;
@@ -679,14 +679,49 @@ function initializeGraph() {
                 if (added > 0 && removed > 0) return 'diff-indicator mixed';
                 return 'diff-indicator';
             })
-            .attr('d', d => {
+            .attr('x', d => {
                 const r = CONFIG.nodeRadii[d.type] || 5;
-                // Create a half-moon arc
-                return `M ${-r} 0 A ${r} ${r} 0 0 1 ${r} 0`;
+                return -r;  // Start at the left edge of the node
             })
-            .attr('transform', d => {
+            .attr('y', d => {
                 const r = CONFIG.nodeRadii[d.type] || 5;
-                return `translate(0, ${-r})`;
+                return -r - 6;  // Increased gap from 4 to 6 pixels
+            })
+            .attr('width', d => {
+                const r = CONFIG.nodeRadii[d.type] || 5;
+                return r * 2;  // Width equals node diameter
+            })
+            .attr('height', 3)  // Fixed height for the bar
+            .attr('rx', 1)  // Rounded corners
+            .attr('ry', 1);
+            
+        // Add the green overlay bar for added lines
+        nodeGroups.append('rect')
+            .attr('class', 'diff-indicator-overlay')
+            .attr('x', d => {
+                const r = CONFIG.nodeRadii[d.type] || 5;
+                return -r;  // Start at the left edge of the node
+            })
+            .attr('y', d => {
+                const r = CONFIG.nodeRadii[d.type] || 5;
+                return -r - 6;  // Increased gap from 4 to 6 pixels to match the base bar
+            })
+            .attr('height', 3)  // Fixed height for the bar
+            .attr('rx', 1)  // Rounded corners
+            .attr('ry', 1)
+            .attr('width', d => {
+                const r = CONFIG.nodeRadii[d.type] || 5;
+                const diffInfo = d.data.diff_info || {};
+                const added = diffInfo.added_lines || 0;
+                const removed = diffInfo.removed_lines || 0;
+                const total = added + removed;
+                
+                if (total === 0) return 0;
+                
+                // Calculate ratio of added lines to total changes
+                const ratio = added / total;
+                // Scale width by ratio
+                return r * 2 * ratio;
             });
     }
     
@@ -2083,10 +2118,7 @@ function getSourceCode(nodeId) {
         .then(data => {
             // Get the code display element
             const codeElement = document.getElementById('element-code');
-            
-            // Debug: Log what we received from the API
-            console.log("API response for source code:", data);
-            
+
             if (diffMode && data.unified_diff) {
                 // Show diff view if we have diff data
                 const diffView = document.getElementById('diff-view');
@@ -2097,9 +2129,6 @@ function getSourceCode(nodeId) {
                     if (typeof Diff2Html === 'undefined') {
                         throw new Error('Diff2Html library not loaded');
                     }
-                    
-                    // Log the diff data for debugging
-                    console.log("Rendering diff content:", data.unified_diff);
                     
                     // Make sure we have non-empty diff content
                     if (!data.unified_diff.trim()) {
@@ -2119,8 +2148,6 @@ function getSourceCode(nodeId) {
                             `+++ b/${fileName}`,
                             diffContent
                         ].join('\n');
-                        
-                        console.log("Added diff header to content:", diffContent);
                     }
                     
                     // Configure diff2html options
@@ -2134,9 +2161,6 @@ function getSourceCode(nodeId) {
                     // Render the diff using the correct API
                     const diffHtml = Diff2Html.html(diffContent, configuration);
                     
-                    // Log the generated HTML for debugging
-                    console.log("Generated diff HTML:", diffHtml.length > 100 ? diffHtml.substring(0, 100) + "..." : diffHtml);
-                    
                     // Set the innerHTML
                     diffView.innerHTML = diffHtml;
                     
@@ -2148,8 +2172,6 @@ function getSourceCode(nodeId) {
                     // Show diff view, hide code view
                     diffView.classList.add('active');
                     codeContainer.classList.add('hidden');
-                    
-                    console.log("Diff view displayed, code container hidden");
                 } catch (err) {
                     console.error('Error rendering diff:', err);
                     // Show regular code view instead
@@ -2172,8 +2194,6 @@ function getSourceCode(nodeId) {
                     diffView.classList.remove('active');
                     diffView.innerHTML = '';
                     codeContainer.classList.remove('hidden');
-                    
-                    console.log("No diff data available for this node, showing regular code");
                 }
                 
                 // Display the code

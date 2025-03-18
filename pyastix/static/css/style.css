@@ -912,30 +912,23 @@ svg {
     font-weight: bold;
 }
 
-/* Node diff indicator (half-moon gauge) */
+/* Node diff indicator (bar gauge) */
 .node .diff-indicator {
     display: none;
+    fill: #dc3545; /* Red for removed lines (base) */
 }
 
 .node.has-diff .diff-indicator {
     display: block;
 }
 
-.node .diff-indicator {
-    fill: none;
-    stroke-width: 3px;
+.diff-indicator-overlay {
+    display: none;
+    fill: #28a745; /* Green for added lines */
 }
 
-.node .diff-indicator.added {
-    stroke: #28a745;
-}
-
-.node .diff-indicator.removed {
-    stroke: #dc3545;
-}
-
-.node .diff-indicator.mixed {
-    stroke: url(#diff-gradient);
+.node.has-diff .diff-indicator-overlay {
+    display: block;
 }
 
 /* Diff view styling */
