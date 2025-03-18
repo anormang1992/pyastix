@@ -15,6 +15,7 @@ Pyastix is a Python CLI tool that renders Python codebases as stunning, interact
 - **Relationship Tracking**: Visualize inheritance, imports, and method calls
 - **Search Functionality**: Find specific modules, classes, or methods and focus on them
 - **Customizable Filters**: Toggle visibility of different code elements
+- **Git Diff Integration**: Visualize code changes using `--diff` mode to see what's been modified in your repository
 
 ## Installation
 
@@ -26,6 +27,7 @@ pip install pyastix
 
 - Python 3.8+
 - Modern web browser (for web interface)
+- Git (for diff mode)
 
 ## Usage
 
@@ -63,6 +65,33 @@ pyastix /path/to/your/project --module mymodule
 ```
 
 This is useful for exploring larger codebases where you want to focus on a particular component without seeing the entire dependency tree.
+
+### Visualizing Code Changes with Diff Mode
+
+Pyastix includes a powerful diff mode that visualizes changes in your Git repository, helping you understand what's been modified since the last commit:
+
+```bash
+pyastix /path/to/your/project --diff
+```
+
+The diff mode provides several visual cues to highlight changes:
+
+- **Node Indicators**: Half-moon gauges on nodes show code changes with color coding:
+  - Green: Added lines only
+  - Red: Removed lines only
+  - Green-Red Gradient: Both additions and removals
+
+- **Detailed Statistics**: When clicking on a node, you'll see:
+  - Lines added/removed counts
+  - Line-by-line diff visualization
+  - Unified (line-by-line) view of changes with color highlighting
+
+This mode is particularly useful for:
+- Code reviews to understand what parts of the codebase have changed
+- Tracking which components are under active development
+- Identifying dependencies impacted by recent changes
+
+> **Note**: Diff mode requires a Git repository and shows changes between your working directory and the last commit.
 
 ### Ignoring Files and Directories
 
@@ -104,6 +133,7 @@ Options:
   -m, --module TEXT         Target a specific module to visualize. Only this module 
                             and its direct dependencies will be shown.
   -t, --terminal            Render graph in the terminal instead of starting a web server.
+  -d, --diff                Show git diff information in the visualization (requires git).
   --help                    Show this message and exit.
 ```
 
