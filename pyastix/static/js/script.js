@@ -42,7 +42,8 @@ const CONFIG = {
     selectionModes: {
         pointer: 'pointer',
         box: 'box',
-        lasso: 'lasso'
+        lasso: 'lasso',
+        move: 'move'
     },
     highlightColor: '#e74c3c',
     selectionColor: '#4169e1'
@@ -125,6 +126,7 @@ const toggleInheritAnimations = document.getElementById('toggle-inherit-animatio
 const pointerTool = document.getElementById('pointer-tool');
 const boxSelectTool = document.getElementById('box-select-tool');
 const lassoSelectTool = document.getElementById('lasso-select-tool');
+const moveTool = document.getElementById('move-tool');
 const selectionActions = document.querySelector('.selection-actions');
 const selectedCountEl = document.getElementById('selected-count');
 const fixSelectedButton = document.getElementById('fix-selected');
@@ -449,6 +451,7 @@ function setupEventListeners() {
     pointerTool.addEventListener('click', () => setSelectionMode(CONFIG.selectionModes.pointer));
     boxSelectTool.addEventListener('click', () => setSelectionMode(CONFIG.selectionModes.box));
     lassoSelectTool.addEventListener('click', () => setSelectionMode(CONFIG.selectionModes.lasso));
+    moveTool.addEventListener('click', () => setSelectionMode(CONFIG.selectionModes.move));
     
     // Selection action buttons
     fixSelectedButton.addEventListener('click', fixSelectedNodes);
@@ -683,10 +686,12 @@ function initializeGraph() {
             // Node is not fixed, so fix it
             d.fx = d.x;
             d.fy = d.y;
+            d.fixed = true;
         } else {
             // Node is fixed, so unfix it
             d.fx = null;
             d.fy = null;
+            d.fixed = false;
         }
         
         // Update styling
@@ -911,32 +916,98 @@ function dragStarted(event, d) {
     // Store the original fixed state
     d._wasFixed = d.fx !== null;
     
+    // Store starting position for calculating delta in move mode
+    d._startX = d.x;
+    d._startY = d.y;
+    
     // Temporarily fix the node during drag for smooth movement
     d.fx = d.x;
     d.fy = d.y;
+    
+    // In move mode, store starting positions for all selected nodes
+    if (selectionMode === CONFIG.selectionModes.move && selectedNodes.has(d.id)) {
+        graphData.nodes.forEach(node => {
+            if (selectedNodes.has(node.id)) {
+                node._startX = node.x;
+                node._startY = node.y;
+                node._preMoveFixed = node.fx !== null;
+                node.fx = node.x;
+                node.fy = node.y;
+            }
+        });
+    }
 }
 
 function dragging(event, d) {
-    d.fx = event.x;
-    d.fy = event.y;
+    // Calculate the displacement from the starting position
+    const dx = event.x - d._startX;
+    const dy = event.y - d._startY;
+    
+    // In move mode, move all selected nodes
+    if (selectionMode === CONFIG.selectionModes.move && selectedNodes.has(d.id)) {
+        graphData.nodes.forEach(node => {
+            if (selectedNodes.has(node.id)) {
+                node.fx = node._startX + dx;
+                node.fy = node._startY + dy;
+            }
+        });
+    } else {
+        // Regular single node drag
+        d.fx = event.x;
+        d.fy = event.y;
+    }
 }
 
 function dragEnded(event, d) {
     if (!event.active) simulation.alphaTarget(0);
     
-    // If the node wasn't fixed before dragging, release it
-    if (!d._wasFixed && !layoutFixed) {
-        d.fx = null;
-        d.fy = null;
-        d.fixed = false;
-        // Restart with higher alpha for more natural movement when released
+    // In move mode, handle all selected nodes
+    if (selectionMode === CONFIG.selectionModes.move && selectedNodes.has(d.id)) {
+        const dx = event.x - d._startX;
+        const dy = event.y - d._startY;
+        
+        graphData.nodes.forEach(node => {
+            if (selectedNodes.has(node.id)) {
+                // If the node wasn't fixed before and layout isn't fixed, release it
+                if (!node._preMoveFixed && !layoutFixed) {
+                    node.fx = null;
+                    node.fy = null;
+                    node.fixed = false;
+                } else {
+                    // Keep the final position of moved node
+                    node.fixed = true;
+                }
+                
+                // Clean up temporary properties
+                delete node._startX;
+                delete node._startY;
+                delete node._preMoveFixed;
+            }
+        });
+        
+        // Update fixed node styling and restart simulation
+        updateFixedNodeStyling();
         simulation.alpha(0.5).restart();
     } else {
-        // Node remains fixed
-        d.fixed = true;
-        // Fixed nodes get smaller alpha adjustment
-        simulation.alpha(0.1).restart();
+        // Regular single node drag end
+        if (!d._wasFixed && !layoutFixed) {
+            d.fx = null;
+            d.fy = null;
+            d.fixed = false;
+            // Restart with higher alpha for more natural movement when released
+            simulation.alpha(0.5).restart();
+        } else {
+            // Node remains fixed
+            d.fixed = true;
+            // Fixed nodes get smaller alpha adjustment
+            simulation.alpha(0.1).restart();
+        }
     }
+    
+    // Clean up temporary properties
+    delete d._startX;
+    delete d._startY;
+    delete d._wasFixed;
     
     // Update fixed node styling
     updateFixedNodeStyling();
@@ -1288,10 +1359,17 @@ function setSelectionMode(mode) {
     pointerTool.classList.toggle('active', mode === CONFIG.selectionModes.pointer);
     boxSelectTool.classList.toggle('active', mode === CONFIG.selectionModes.box);
     lassoSelectTool.classList.toggle('active', mode === CONFIG.selectionModes.lasso);
+    moveTool.classList.toggle('active', mode === CONFIG.selectionModes.move);
     
     // Update cursor style
     if (svg) {
-        svg.style('cursor', mode === CONFIG.selectionModes.pointer ? 'default' : 'crosshair');
+        if (mode === CONFIG.selectionModes.pointer) {
+            svg.style('cursor', 'default');
+        } else if (mode === CONFIG.selectionModes.move) {
+            svg.style('cursor', 'move');
+        } else { // box or lasso selection
+            svg.style('cursor', 'crosshair');
+        }
     }
     
     // Setup the appropriate selection behavior

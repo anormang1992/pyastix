@@ -313,7 +313,6 @@ class WebServer:
         """
         Start the web server.
         """
-        self._ensure_assets_exist()
         self.app.run(host='127.0.0.1', port=self.port)
     
     def open_browser(self) -> None:
@@ -322,26 +321,3 @@ class WebServer:
         """
         url = f"http://127.0.0.1:{self.port}"
         threading.Timer(1.5, lambda: webbrowser.open(url)).start()
-    
-    def _ensure_assets_exist(self) -> None:
-        """
-        Ensure that template and static directories exist.
-        """
-        # Verify that the template and static directories exist
-        if not self.templates_dir.exists():
-            raise FileNotFoundError(f"Templates directory not found at {self.templates_dir}")
-        
-        if not self.static_dir.exists():
-            raise FileNotFoundError(f"Static directory not found at {self.static_dir}")
-        
-        # Check for index.html
-        if not (self.templates_dir / 'index.html').exists():
-            raise FileNotFoundError(f"index.html not found in {self.templates_dir}")
-        
-        # Check for essential static files
-        if not (self.static_dir / 'js' / 'script.js').exists():
-            raise FileNotFoundError(f"script.js not found in {self.static_dir}/js")
-            
-        if not (self.static_dir / 'css' / 'style.css').exists():
-            raise FileNotFoundError(f"style.css not found in {self.static_dir}/css") 
-        
