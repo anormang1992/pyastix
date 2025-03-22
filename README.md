@@ -54,7 +54,7 @@ To visualize your codebase directly in the terminal:
 pyastix /path/to/your/project --terminal
 ```
 
-This will display a text-based visualization of your codebase's structure right in your terminal. For smaller codebases, it will show an actual graph rendering. For larger codebases, it will display a hierarchical tree view.
+This will display a text-based visualization of your codebase's structure right in your terminal.
 
 ### Focusing on Specific Modules
 
@@ -76,7 +76,7 @@ pyastix /path/to/your/project --diff
 
 The diff mode provides several visual cues to highlight changes:
 
-- **Node Indicators**: Half-moon gauges on nodes show code changes with color coding:
+- **Node Indicators**:  Node indicators show proportional code changes with color coding:
   - Green: Added lines only
   - Red: Removed lines only
   - Green-Red Gradient: Both additions and removals
@@ -239,10 +239,6 @@ The MI is displayed on a scale from 0-100, where higher values represent more ma
 - **Difficult to Maintain (0-40)**: Significant maintenance issues, refactoring recommended (radon rank F)
 
 Modules with low maintainability scores are good candidates for refactoring or closer inspection.
-
-## Examples
-
-Check the `examples` directory for sample usage scripts.
 
 ## License
 

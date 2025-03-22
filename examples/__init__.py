@@ -1,3 +1,0 @@
-"""
-Examples package for Pyastix.
-""" 
