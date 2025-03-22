@@ -2118,74 +2118,82 @@ function getSourceCode(nodeId) {
         .then(data => {
             // Get the code display element
             const codeElement = document.getElementById('element-code');
+            
+            // Check if we're in diff mode and if the diff view elements exist
             const diffView = document.getElementById('diff-view');
             const codeContainer = document.getElementById('element-code-container');
-
-            // First, reset both views to ensure a clean state
-            diffView.classList.remove('active');
-            codeContainer.classList.remove('hidden');
-            diffView.innerHTML = '';
-
-            if (diffMode && data.unified_diff && data.unified_diff.trim()) {
-                // Show diff view if we have diff data
-                try {
-                    // Check if Diff2Html is available
-                    if (typeof Diff2Html === 'undefined') {
-                        throw new Error('Diff2Html library not loaded');
-                    }
-                    
-                    // If the diff doesn't start with 'diff --git', add a simple header
-                    let diffContent = data.unified_diff;
-                    if (!diffContent.startsWith('diff --git')) {
-                        const filePath = data.path || 'unknown_file.py';
-                        const fileName = filePath.split('/').pop();
+            
+            // Handle diff mode and elements exist
+            if (diffMode && diffView && codeContainer) {
+                // Reset both views to ensure a clean state
+                diffView.classList.remove('active');
+                codeContainer.classList.remove('hidden');
+                diffView.innerHTML = '';
+                
+                if (data.unified_diff && data.unified_diff.trim()) {
+                    // Show diff view if we have diff data
+                    try {
+                        // Check if Diff2Html is available
+                        if (typeof Diff2Html === 'undefined') {
+                            throw new Error('Diff2Html library not loaded');
+                        }
                         
-                        // Add standard git diff header
-                        diffContent = [
-                            `diff --git a/${fileName} b/${fileName}`,
-                            `--- a/${fileName}`,
-                            `+++ b/${fileName}`,
-                            diffContent
-                        ].join('\n');
+                        // If the diff doesn't start with 'diff --git', add a simple header
+                        let diffContent = data.unified_diff;
+                        if (!diffContent.startsWith('diff --git')) {
+                            const filePath = data.path || 'unknown_file.py';
+                            const fileName = filePath.split('/').pop();
+                            
+                            // Add standard git diff header
+                            diffContent = [
+                                `diff --git a/${fileName} b/${fileName}`,
+                                `--- a/${fileName}`,
+                                `+++ b/${fileName}`,
+                                diffContent
+                            ].join('\n');
+                        }
+                        
+                        // Configure diff2html options
+                        const configuration = {
+                            drawFileList: false,
+                            matching: 'lines',
+                            outputFormat: 'line-by-line',
+                            highlight: true
+                        };
+                        
+                        // Render the diff using the correct API
+                        const diffHtml = Diff2Html.html(diffContent, configuration);
+                        
+                        // Set the innerHTML
+                        diffView.innerHTML = diffHtml;
+                        
+                        // Ensure the diff view is visible and properly styled
+                        diffView.style.display = 'block';
+                        diffView.style.maxHeight = '70vh';
+                        diffView.style.overflow = 'auto';
+                        
+                        // Show diff view, hide code view
+                        diffView.classList.add('active');
+                        codeContainer.classList.add('hidden');
+                    } catch (err) {
+                        console.error('Error rendering diff:', err);
+                        // Show regular code view instead
+                        codeElement.textContent = data.code || "// No code available";
+                        hljs.highlightElement(codeElement);
+                        
+                        // Also append error message
+                        const errorDiv = document.createElement('div');
+                        errorDiv.style.color = 'red';
+                        errorDiv.textContent = `Error rendering diff: ${err.message}`;
+                        codeElement.parentNode.appendChild(errorDiv);
                     }
-                    
-                    // Configure diff2html options
-                    const configuration = {
-                        drawFileList: false,
-                        matching: 'lines',
-                        outputFormat: 'line-by-line',
-                        highlight: true
-                    };
-                    
-                    // Render the diff using the correct API
-                    const diffHtml = Diff2Html.html(diffContent, configuration);
-                    
-                    // Set the innerHTML
-                    diffView.innerHTML = diffHtml;
-                    
-                    // Ensure the diff view is visible and properly styled
-                    diffView.style.display = 'block';
-                    diffView.style.maxHeight = '70vh';
-                    diffView.style.overflow = 'auto';
-                    
-                    // Show diff view, hide code view
-                    diffView.classList.add('active');
-                    codeContainer.classList.add('hidden');
-                } catch (err) {
-                    console.error('Error rendering diff:', err);
-                    // Show regular code view instead
+                } else {
+                    // No diff data, display regular code
                     codeElement.textContent = data.code || "// No code available";
                     hljs.highlightElement(codeElement);
-                    
-                    // Also append error message
-                    const errorDiv = document.createElement('div');
-                    errorDiv.style.color = 'red';
-                    errorDiv.textContent = `Error rendering diff: ${err.message}`;
-                    codeElement.parentNode.appendChild(errorDiv);
                 }
             } else {
-                // Standard code view for nodes without diff data
-                // Display the code
+                // Standard code view (non-diff mode or elements don't exist)
                 codeElement.textContent = data.code || "// No code available";
                 hljs.highlightElement(codeElement);
             }
