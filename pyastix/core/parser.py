@@ -662,43 +662,56 @@ class CodebaseParser:
         start_line = element.lineno
         end_line = element.end_lineno
         
+        # Extract the file headers (diff --git, ---, +++ lines)
+        file_headers = []
+        for line in file_diff_lines:
+            if line.startswith("diff --git") or line.startswith("---") or line.startswith("+++"):
+                file_headers.append(line)
+            elif line.startswith("@@"):
+                # Once we reach the first hunk header, we've collected all file headers
+                break
+        
         # Find hunks that overlap with the element's lines
-        relevant_lines = []
-        in_hunk = False
-        current_hunk_header = None
-        line_offset = 0
+        relevant_hunks = []
+        current_hunk = []
+        in_relevant_hunk = False
         
         for line in file_diff_lines:
             # Hunk header
             if line.startswith("@@"):
+                # If we were processing a relevant hunk, save it
+                if in_relevant_hunk and current_hunk:
+                    relevant_hunks.append(current_hunk)
+                
+                # Start a new hunk
+                current_hunk = [line]
+                
+                # Check if this hunk overlaps with the element
                 match = re.search(r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))?", line)
                 if match:
                     old_start = int(match.group(1))
-                    old_count = int(match.group(2) or 1)
+                    old_count = int(match.group(2) or 1) if match.group(2) else 1
+                    old_end = old_start + old_count - 1
                     
                     # Check if this hunk overlaps with the element
-                    old_end = old_start + old_count - 1
                     if (old_start <= end_line and old_end >= start_line):
-                        in_hunk = True
-                        current_hunk_header = line
-                        line_offset = 0
+                        in_relevant_hunk = True
                     else:
-                        in_hunk = False
+                        in_relevant_hunk = False
+                else:
+                    in_relevant_hunk = False
             
-            elif in_hunk:
-                if line.startswith(' '):  # Context line
-                    line_offset += 1
-                elif line.startswith('+'):  # Added line
-                    line_offset += 1
-                elif line.startswith('-'):  # Removed line
-                    pass  # No increment for removed lines in new file
-                
-                # The first time we find a relevant hunk, add the header
-                if not relevant_lines and line_offset > 0:
-                    relevant_lines.append(current_hunk_header)
-                
-                # Add the line if it's in our element's range
-                if in_hunk:
-                    relevant_lines.append(line)
+            elif in_relevant_hunk:
+                # Add all lines for relevant hunks (preserve context)
+                current_hunk.append(line)
         
-        return "\n".join(relevant_lines) 
+        # Add the last hunk if it's relevant
+        if in_relevant_hunk and current_hunk:
+            relevant_hunks.append(current_hunk)
+        
+        # If we found relevant hunks, combine them with the file headers
+        if relevant_hunks:
+            combined_diff = file_headers + [line for hunk in relevant_hunks for line in hunk]
+            return "\n".join(combined_diff)
+        
+        return "" 
