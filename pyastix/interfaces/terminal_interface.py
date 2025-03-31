@@ -62,8 +62,24 @@ class TerminalRenderer:
         
         # Create a Group to collect all renderable components
         components = []
-        
 
+        # Add the header
+        header = self._create_header()
+        components.append(header)
+
+        graph_view = self._create_hierarchical_view()
+        components.append(graph_view)
+
+        # Add the footer and legend 
+        footer = self._create_footer()
+        components.append(footer)
+
+        # Combine all components into a single renderable
+        content = Group(*components)
+        
+        # Use pager to ensure we start at the top
+        with self.console.pager(styles=True):
+            self.console.print(content)
     
     def _create_header(self) -> Group:
         """
@@ -104,7 +120,14 @@ class TerminalRenderer:
         for edge in self.graph_data.edges:
             edge_counts[edge.type] = edge_counts.get(edge.type, 0) + 1
         
+        # Create stats panel in a more visually appealing way
+        node_stats = Table.grid(padding=0)  # Reduced padding
+        node_stats.add_column(style="bold cyan", justify="right")
+        node_stats.add_column(style="bold white", justify="left")
 
+        node_stats.add_row("SUMMARY STATISTICS", "")
+        node_stats.add_row("Total Nodes:", f"{len(self.graph_data.nodes)}")
+        node_stats.add_row("Total Edges:", f"{len(self.graph_data.edges)}")
         
         node_stats.add_row("NODE TYPES", "")
         
