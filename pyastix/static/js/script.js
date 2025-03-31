@@ -2,9 +2,9 @@
 const CONFIG = {
     // Layout and simulation
     defaultLinkDistance: 100,
-    defaultChargeStrength: -120, // Reduced from -150 to allow closer positioning
-    moduleChargeStrength: -400, // Reduced from -700 to allow closer positioning
-    defaultCollideRadius: 40, // Reduced from 60 to allow closer positioning
+    defaultChargeStrength: -150, // Increased slightly for better spacing
+    moduleChargeStrength: -450, // Increased for better module spacing
+    defaultCollideRadius: 45, // Increased to prevent node overlaps
     linkStrength: {
         contains: 0.7,
         calls: 0.3,
@@ -23,16 +23,16 @@ const CONFIG = {
     
     // Visualization
     nodeRadii: {
-        module: 15,
-        class: 12,
-        method: 8,
-        function: 8
+        module: 18, // Larger for better visibility
+        class: 14,  // Larger for better visibility
+        method: 9,  // Larger for better visibility
+        function: 9 // Larger for better visibility
     },
     nodeLabelOffsets: {
-        module: 20,
-        class: 15,
-        method: 12,
-        function: 12
+        module: 24, // Adjusted for new node sizes
+        class: 18,  // Adjusted for new node sizes
+        method: 14,  // Adjusted for new node sizes
+        function: 14 // Adjusted for new node sizes
     },
     
     // Zoom settings
@@ -45,7 +45,7 @@ const CONFIG = {
         lasso: 'lasso',
         move: 'move'
     },
-    highlightColor: '#e74c3c',
+    highlightColor: '#2563eb', // Updated to match accent color
     selectionColor: '#4169e1'
 };
 
@@ -319,6 +319,23 @@ function closeSidePanel(previousTransform) {
     // Close the panel
     sidePanel.classList.add('collapsed');
     
+    // Reset node and edge highlighting
+    // This removes any highlighting applied when the node was clicked
+    nodeElements.selectAll('circle')
+        .style('stroke', null)
+        .style('stroke-width', null)
+        .style('filter', null);
+    
+    linkElements
+        .classed('highlighted', false)
+        .style('filter', null);
+    
+    nodeElements
+        .classed('highlighted', false);
+    
+    // Update styling for fixed nodes - this ensures fixed nodes still show their indicators
+    updateFixedNodeStyling();
+    
     // Reset highlighting and selection
     resetNodeHighlighting();
     selectedNode = null;
@@ -516,9 +533,75 @@ function initializeGraph() {
         .attr('width', '100%')
         .attr('height', '100%');
     
-    // Add gradient for mixed diff indicators
+    // Add definitions for gradients and effects
+    const defs = svg.append('defs');
+    
+    // Create gradient for module nodes
+    const moduleGradient = defs.append('linearGradient')
+        .attr('id', 'module-gradient')
+        .attr('x1', '0%')
+        .attr('y1', '0%')
+        .attr('x2', '0%')
+        .attr('y2', '100%');
+    
+    moduleGradient.append('stop')
+        .attr('offset', '0%')
+        .attr('stop-color', 'var(--color-node-module-light)');
+        
+    moduleGradient.append('stop')
+        .attr('offset', '100%')
+        .attr('stop-color', 'var(--color-node-module-dark)');
+    
+    // Create gradient for class nodes
+    const classGradient = defs.append('linearGradient')
+        .attr('id', 'class-gradient')
+        .attr('x1', '0%')
+        .attr('y1', '0%')
+        .attr('x2', '0%')
+        .attr('y2', '100%');
+    
+    classGradient.append('stop')
+        .attr('offset', '0%')
+        .attr('stop-color', 'var(--color-node-class-light)');
+        
+    classGradient.append('stop')
+        .attr('offset', '100%')
+        .attr('stop-color', 'var(--color-node-class-dark)');
+    
+    // Create gradient for method nodes
+    const methodGradient = defs.append('linearGradient')
+        .attr('id', 'method-gradient')
+        .attr('x1', '0%')
+        .attr('y1', '0%')
+        .attr('x2', '0%')
+        .attr('y2', '100%');
+    
+    methodGradient.append('stop')
+        .attr('offset', '0%')
+        .attr('stop-color', 'var(--color-node-method-light)');
+        
+    methodGradient.append('stop')
+        .attr('offset', '100%')
+        .attr('stop-color', 'var(--color-node-method-dark)');
+    
+    // Create gradient for function nodes
+    const functionGradient = defs.append('linearGradient')
+        .attr('id', 'function-gradient')
+        .attr('x1', '0%')
+        .attr('y1', '0%')
+        .attr('x2', '0%')
+        .attr('y2', '100%');
+    
+    functionGradient.append('stop')
+        .attr('offset', '0%')
+        .attr('stop-color', 'var(--color-node-function-light)');
+        
+    functionGradient.append('stop')
+        .attr('offset', '100%')
+        .attr('stop-color', 'var(--color-node-function-dark)');
+    
+    // Add gradient for mixed diff indicators if in diff mode
     if (diffMode) {
-        const defs = svg.append('defs');
         const gradient = defs.append('linearGradient')
             .attr('id', 'diff-gradient')
             .attr('gradientTransform', 'rotate(135)');
@@ -1212,31 +1295,77 @@ function nodeClicked(event, node) {
     // Save the selected node
     selectedNode = node;
     
-    // Highlight clicked node
+    // Reset all node and link highlighting before applying new ones
     nodeElements.selectAll('circle')
-        .style('stroke', d => d.id === node.id ? CONFIG.highlightColor : '#fff')
-        .style('stroke-width', d => d.id === node.id ? 3 : 2);
+        .style('stroke', null)
+        .style('stroke-width', null)
+        .style('filter', null);
     
-    // Show side panel
-    sidePanel.classList.remove('collapsed');
+    linkElements
+        .classed('highlighted', false)
+        .style('filter', null);
     
-    // Adjust view if panel was previously collapsed
+    nodeElements
+        .classed('highlighted', false);
+    
+    // Highlight clicked node
+    d3.select(event.currentTarget)
+        .selectAll('circle')
+        .style('stroke', CONFIG.highlightColor)
+        .style('stroke-width', 3)
+        .style('filter', `drop-shadow(0 0 ${getComputedStyle(document.documentElement).getPropertyValue('--node-glow-strength')} ${CONFIG.highlightColor})`);
+    
+    // Also add the highlighted class to the clicked node
+    d3.select(event.currentTarget)
+        .classed('highlighted', true);
+    
+    // Find and highlight connected nodes and edges
+    const connectedNodeIds = new Set(); // Keep track of connected node IDs
+    
+    // Find connected links
+    linkElements.each(function(d) {
+        // Check if this link is connected to the clicked node
+        if (d.source.id === node.id || d.target.id === node.id) {
+            // Add the highlighted class to this link
+            d3.select(this).classed('highlighted', true);
+            
+            // Add drop shadow effect to the highlighted link
+            d3.select(this).style('filter', 'drop-shadow(0 0 2px var(--color-accent-primary))');
+            
+            // Track the connected node (the one that isn't the clicked node)
+            const connectedNodeId = d.source.id === node.id ? d.target.id : d.source.id;
+            connectedNodeIds.add(connectedNodeId);
+        }
+    });
+    
+    // Now highlight all connected nodes
+    nodeElements.each(function(d) {
+        if (connectedNodeIds.has(d.id)) {
+            // Add the highlighted class to this node
+            d3.select(this).classed('highlighted', true);
+            
+            // Apply visual highlighting
+            d3.select(this).selectAll('circle')
+                .style('filter', 'drop-shadow(0 0 5px var(--color-accent-primary-hover))');
+        }
+    });
+    
+    // If panel is currently closed, open it
     if (panelWasCollapsed) {
+        // Show the panel
+        sidePanel.classList.remove('collapsed');
+        
+        // Update element info
+        updateElementInfo(node);
+        
+        // After panel opens, adjust graph view to accommodate it
         setTimeout(() => {
             adjustGraphForPanelChange(previousTransform, true);
         }, CONFIG.panelTransitionDelay);
-    }
-    
-    // Update side panel content
-    elementName.textContent = node.label;
-    elementType.textContent = capitalizeFirstLetter(node.type);
-    elementPath.textContent = node.data.path;
-    
-    // Update stats display
-    updateNodeStats(node);
-    
-    // Fetch source code
-    getSourceCode(node.id);
+            } else {
+        // Just update the element info
+        updateElementInfo(node);
+            }
 }
 
 // Search for elements
@@ -2204,4 +2333,18 @@ function getSourceCode(nodeId) {
             codeElement.textContent = `// Error fetching source code: ${error}`;
             hljs.highlightElement(codeElement);
         });
+}
+
+// Update the element info in the side panel for a node
+function updateElementInfo(node) {
+    // Update basic info
+    elementName.textContent = node.label;
+    elementType.textContent = capitalizeFirstLetter(node.type);
+    elementPath.textContent = node.data.path;
+    
+    // Update stats display
+    updateNodeStats(node);
+    
+    // Fetch source code
+    getSourceCode(node.id);
 }

@@ -41,17 +41,46 @@
     --color-selection: rgba(37, 99, 235, 0.15);
     --color-selection-border: rgba(37, 99, 235, 0.5);
     
-    /* Node Colors - Modern, distinct and clear */
-    --color-node-module: #38bdf8;  /* Sky blue */
-    --color-node-class: #8b5cf6;   /* Violet */
-    --color-node-method: #10b981;  /* Emerald */
-    --color-node-function: #f97316; /* Orange */
+    /* Node Colors - Enhanced with gradient-friendly base colors */
+    --color-node-module-base: #38bdf8;  /* Sky blue */
+    --color-node-module-light: #7dd3fc;
+    --color-node-module-dark: #0284c7;
     
-    /* Edge Colors */
-    --color-edge-calls: #f97316;   /* Orange - matches function */
-    --color-edge-imports: #38bdf8; /* Sky blue - matches module */
-    --color-edge-inherits: #8b5cf6; /* Violet - matches class */
-    --color-edge-contains: #64748b; /* Slate - neutral */
+    --color-node-class-base: #8b5cf6;   /* Violet */
+    --color-node-class-light: #a78bfa; 
+    --color-node-class-dark: #7c3aed;
+    
+    --color-node-method-base: #10b981;  /* Emerald */
+    --color-node-method-light: #34d399;
+    --color-node-method-dark: #059669;
+    
+    --color-node-function-base: #f97316; /* Orange */
+    --color-node-function-light: #fb923c;
+    --color-node-function-dark: #ea580c;
+    
+    /* Keeping these for backward compatibility */
+    --color-node-module: var(--color-node-module-base);  
+    --color-node-class: var(--color-node-class-base);   
+    --color-node-method: var(--color-node-method-base);  
+    --color-node-function: var(--color-node-function-base); 
+    
+    /* Edge Colors - Enhanced with transparency values */
+    --color-edge-calls: var(--color-node-function-base);   
+    --color-edge-calls-faded: rgba(249, 115, 22, 0.6);
+    
+    --color-edge-imports: var(--color-node-module-base); 
+    --color-edge-imports-faded: rgba(56, 189, 248, 0.6);
+    
+    --color-edge-inherits: var(--color-node-class-base); 
+    --color-edge-inherits-faded: rgba(139, 92, 246, 0.6);
+    
+    --color-edge-contains: #64748b; 
+    --color-edge-contains-faded: rgba(100, 116, 139, 0.3);
+    
+    /* Visual effects */
+    --node-shadow: 0 3px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08);
+    --node-shadow-hover: 0 6px 12px rgba(0, 0, 0, 0.15), 0 3px 6px rgba(0, 0, 0, 0.1);
+    --node-glow-strength: 8px;
     
     /* Diff Colors */
     --color-diff-added: #10b981;
@@ -254,6 +283,7 @@ header {
 .node.selected circle {
     stroke: var(--color-accent-primary);
     stroke-width: 3px;
+    filter: drop-shadow(0 0 var(--node-glow-strength) var(--color-accent-primary-hover));
 }
 
 /* Main content */
@@ -628,128 +658,177 @@ svg {
 }
 
 .node circle {
+    transition: stroke-width 0.3s ease, filter 0.3s ease;
     stroke: var(--color-bg-primary);
     stroke-width: 2px;
-    transition: stroke-width 0.2s;
+    filter: drop-shadow(var(--node-shadow));
 }
 
+/* Improve hover effect with just stroke and shadow changes */
 .node:hover circle {
     stroke-width: 3px;
+    filter: drop-shadow(var(--node-shadow-hover));
 }
 
 /* Style for fixed nodes */
 .fixed-node circle {
     stroke: var(--color-fixed-indicator);
     stroke-width: 3px;
-    stroke-dasharray: 3, 3;  /* Dashed stroke pattern */
+    stroke-dasharray: 4, 3;  /* Refined dashed stroke pattern */
+    animation: rotateStroke 20s linear infinite;
+}
+
+@keyframes rotateStroke {
+    from { stroke-dashoffset: 0; }
+    to { stroke-dashoffset: 100; }
 }
 
 /* Style for nodes that are both fixed and selected */
 .fixed-selected-node circle {
     stroke: var(--color-fixed-selected-indicator);
     stroke-width: 3px;
-    stroke-dasharray: 3, 3;  /* Dashed stroke pattern like fixed nodes */
+    stroke-dasharray: 4, 3;
+    animation: rotateStroke 15s linear infinite;
 }
 
+/* Node type styling with gradients */
 .node.module circle {
-    fill: var(--color-node-module);
+    fill: url(#module-gradient);
 }
 
 .node.class circle {
-    fill: var(--color-node-class);
+    fill: url(#class-gradient);
 }
 
 .node.method circle {
-    fill: var(--color-node-method);
+    fill: url(#method-gradient);
 }
 
 .node.function circle {
-    fill: var(--color-node-function);
+    fill: url(#function-gradient);
 }
 
+/* Enhance the text on hover for better feedback */
 .node text {
     font-size: 12px;
     fill: var(--color-text-primary);
     font-weight: var(--font-weight-medium);
-    text-shadow: 0 1px 0 var(--color-bg-primary), 
-                 1px 0 0 var(--color-bg-primary), 
-                 0 -1px 0 var(--color-bg-primary), 
-                 -1px 0 0 var(--color-bg-primary);
+    text-shadow: 0 1px 3px var(--color-bg-primary), 
+                 1px 0 3px var(--color-bg-primary), 
+                 0 -1px 3px var(--color-bg-primary), 
+                 -1px 0 3px var(--color-bg-primary);
+    transition: fill 0.2s ease, font-weight 0.2s ease;
 }
 
+/* Add text hover effect back */
+.node:hover text {
+    fill: var(--color-accent-primary);
+    font-weight: var(--font-weight-semibold);
+}
+
+/* Edge styling */
 .link {
-    stroke: var(--color-edge-contains);
-    stroke-opacity: 0.6;
-    stroke-width: 2px;
+    stroke: var(--color-edge-contains-faded);
+    stroke-opacity: 0.8;
+    stroke-width: 1.5px;
+    transition: stroke-opacity 0.3s, stroke-width 0.3s;
 }
 
 .link.calls {
-    stroke: var(--color-edge-calls);
-    stroke-dasharray: 5;
+    stroke: var(--color-edge-calls-faded);
+    stroke-dasharray: 5, 3;
+    stroke-width: 2px;
 }
 
-/* Animation for call lines - small circles */
+/* Animation for call lines - improved animation */
 .link.calls.animated {
-    stroke-dasharray: 0.1, 7;  /* Very small dot for better circle effect */
+    stroke-dasharray: 0.1, 10;
     stroke-linecap: round;
-    stroke-width: 4px;  /* Thicker for more visible dots */
-    animation: flowCallsAnimation 1.5s linear infinite;
+    stroke-width: 3px;
+    stroke-opacity: 0.85;
+    animation: flowCallsAnimation 3s linear infinite;
 }
 
 @keyframes flowCallsAnimation {
     0% {
         stroke-dashoffset: 0;
+        stroke-opacity: 0.6;
+    }
+    50% {
+        stroke-opacity: 0.9;
     }
     100% {
-        stroke-dashoffset: -21;  /* Multiple of the pattern length (0.1 + 7) * 3 */
+        stroke-dashoffset: -30;
+        stroke-opacity: 0.6;
     }
 }
 
 .link.imports {
-    stroke: var(--color-edge-imports);
+    stroke: var(--color-edge-imports-faded);
+    stroke-width: 2px;
 }
 
-/* Animation for import lines - horizontal dashes */
+/* Animation for import lines - improved animation */
 .link.imports.animated {
-    stroke-dasharray: 10, 5;  /* Longer horizontal dashes with wider spacing */
+    stroke-dasharray: 12, 4;
     stroke-linecap: butt;
-    animation: flowImportsAnimation 2s linear infinite;
+    stroke-width: 2.5px;
+    stroke-opacity: 0.85;
+    animation: flowImportsAnimation 3.5s linear infinite;
 }
 
 @keyframes flowImportsAnimation {
     0% {
-        stroke-dashoffset: -45;  /* Reversed: Start with negative offset */
+        stroke-dashoffset: -48;
+        stroke-opacity: 0.6;
+    }
+    50% {
+        stroke-opacity: 0.9;
     }
     100% {
-        stroke-dashoffset: 0;  /* Move to zero, creating flow toward target */
+        stroke-dashoffset: 0;
+        stroke-opacity: 0.6;
     }
 }
 
 .link.inherits {
-    stroke: var(--color-edge-inherits);
-    stroke-width: 3px;
+    stroke: var(--color-edge-inherits-faded);
+    stroke-width: 2.5px;
 }
 
-/* Animation for inheritance lines - special pattern */
+/* Animation for inheritance lines - improved animation */
 .link.inherits.animated {
-    stroke-dasharray: 1, 10, 1, 3;  /* Complex pattern: dot, gap, dot, small gap */
+    stroke-dasharray: 2, 6, 2, 2;
     stroke-linecap: round;
-    stroke-width: 4px;
-    animation: inheritAnimation 3s linear infinite;
+    stroke-width: 3px;
+    stroke-opacity: 0.85;
+    animation: inheritAnimation 4s linear infinite;
 }
 
 @keyframes inheritAnimation {
     0% {
-        stroke-dashoffset: -45;  /* Reversed: Start with negative offset */
+        stroke-dashoffset: -36;
+        stroke-opacity: 0.6;
+    }
+    50% {
+        stroke-opacity: 0.9;
     }
     100% {
-        stroke-dashoffset: 0;  /* Move to zero, creating flow toward target */
+        stroke-dashoffset: 0;
+        stroke-opacity: 0.6;
     }
 }
 
 .link.contains {
-    stroke: var(--color-edge-contains);
-    stroke-width: 1px;
+    stroke: var(--color-edge-contains-faded);
+    stroke-width: 2px;
+    stroke-opacity: 0.75;
+}
+
+/* Hover effect for links */
+.link:hover {
+    stroke-opacity: 1;
+    stroke-width: 3px;
 }
 
 /* Dropdown for search results */
@@ -1220,4 +1299,15 @@ svg {
     /* Better rendering */
     font-feature-settings: "liga" 1, "calt" 1; /* Enable ligatures */
     -webkit-font-smoothing: auto;
+}
+
+/* Style for showing node connections */
+.link.highlighted {
+    stroke-opacity: 1;
+    stroke-width: 3px;
+    filter: drop-shadow(0 0 2px var(--color-accent-primary));
+}
+
+.node.highlighted circle {
+    filter: drop-shadow(0 0 5px var(--color-accent-primary-hover));
 }
